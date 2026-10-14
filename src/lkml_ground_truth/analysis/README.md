@@ -1,65 +1,93 @@
-# Análises
+# Analysis
 
-Esta pasta guarda análises reproduzíveis sobre o resultado do matching. Cada
-função em `fixed.py` responde uma pergunta específica com Polars Lazy e gera
-um CSV em `output/analysis/` — diretório ignorado pelo Git.
+This folder holds reproducible analyses over the matching results. Each
+function in `fixed.py` answers one specific question with Polars Lazy and
+writes a CSV to `output/analysis/`, a directory ignored by Git.
 
-Ela usa o mesmo contexto de consulta do projeto; portanto, lê as tabelas Parquet
-`original` e `enriched` definidas no `config.toml`, sem criar cópias dos
-datasets.
+It uses the same query context as the rest of the project, so it reads the
+`original` and `enriched` Parquet tables defined in `config.toml` without
+making copies of the datasets.
 
-## Executar
+## Running
 
-Depois de rodar o pipeline e `make enrich`:
+After running the pipeline (`make run`, which also runs `make enrich`):
 
 ```bash
-# Da raiz do repositório
+# From the repository root
 make analysis ANALYSIS=dataset_coverage LIST=all
 
-# Ou diretamente nesta pasta
+# Or directly from this folder
 make -C src/lkml_ground_truth/analysis run ANALYSIS=commit_reuse LIST=netdev
 ```
 
-## Consulta SQL interativa
+## Interactive SQL queries
 
-`sql_querier.py` é a entrada de consultas desta pasta, equivalente ao
-componente de análise do MLH-Archiver. Sem SQL, abre um REPL; com SQL, executa
-uma única consulta:
+`sql_querier.py` is this folder's query entry point, equivalent to the
+analysis component of MLH-Archiver. Without SQL it opens a REPL; with SQL it
+runs a single query:
 
 ```bash
-make -C src/lkml_ground_truth/analysis query LIST=all
-make -C src/lkml_ground_truth/analysis query LIST=netdev SQL='SELECT * FROM enriched LIMIT 10'
+make analysis ANALYSIS=sql_querier.py LIST=all
+make analysis ANALYSIS=sql_querier.py LIST=netdev SQL='SELECT * FROM enriched LIMIT 10'
 ```
 
-Ele é uma interface para o mesmo contexto de consulta do projeto, então as
-tabelas disponíveis são `original` e `enriched`.
+It is an interface to the same query context as the rest of the project, so
+the available tables are `original` and `enriched`.
 
-Use `make -C src/lkml_ground_truth/analysis help` para a lista de análises. Para escolher outro
-arquivo de configuração ou destino dos CSVs:
+Use `make -C src/lkml_ground_truth/analysis help` to list the analyses. To use
+another configuration file or a different destination for the CSVs:
 
 ```bash
 make -C src/lkml_ground_truth/analysis run ANALYSIS=score_bands \
-  CONFIG=/caminho/config.toml RESULTS_DIR=/tmp/lkml-analysis
+  CONFIG=/path/to/config.toml RESULTS_DIR=/tmp/lkml-analysis
 ```
 
-## Análises fixas disponíveis
+## Available fixed analyses
 
-| Análise | O que revela |
+| Analysis | What it reveals |
 | --- | --- |
-| `dataset_coverage` | Cobertura do pipeline em relação a todos os e-mails: fonte original, patches avaliados, matches, matches confiáveis e erros. Usa `original` e `enriched`. |
-| `match_coverage` | Cobertura, matches confiáveis, candidatos ausentes, erros e score médio por lista. |
-| `score_bands` | Quantos patches estão em cada decisão do pipeline: confiável, para revisão, sem candidato ou abaixo do limiar. |
-| `match_errors` | Erros de busca de candidatos agrupados, para diagnosticar problemas sistemáticos. |
-| `commit_reuse` | Commits associados a vários e-mails; são candidatos a séries, reenvios ou falsos positivos que merecem revisão. |
-| `matched_pairs` | Pares e-mail/commit com as duas datas, úteis para analisar a latência até a integração e validar casos individuais. |
+| `dataset_coverage` | Pipeline coverage relative to all emails: original source, patches evaluated, matches, confident matches and errors. Uses `original` and `enriched`. |
+| `match_coverage` | Coverage, confident matches, missing candidates, errors and mean score per list. |
+| `score_bands` | How many patches fall in each pipeline decision: confident, needs review, no candidate or below threshold. |
+| `match_errors` | Candidate-search errors, grouped to help diagnose systematic problems. |
+| `commit_reuse` | Commits linked to several emails; candidates for series, resends or false positives worth reviewing. |
+| `matched_pairs` | Email/commit pairs with both dates, useful for analyzing integration latency and validating individual cases. |
 
-`commit_date` é a data do *committer* no Git, em ISO 8601. Para análises
-temporais, ela só estará presente em execuções do pipeline feitas após a
-adição dessa coluna.
+`commit_date` is the Git *committer* date, in ISO 8601. For temporal
+analyses, it is only present in pipeline runs made after this column was
+added.
 
-## Adicionar uma descoberta
+## Temporal analysis (figure)
 
-1. Crie uma função em `fixed.py`, usando `scan_original()` e/ou `scan_enriched()`.
-2. Documente a pergunta e como interpretar o resultado nesta tabela.
-3. Adicione a função em `ANALYSES`, execute `make analysis ANALYSIS=<nome>` e mantenha o código no Git;
-   o CSV resultante fica em `output/analysis/`.
+`temporal.py` studies the results over time, by month of the patch email date,
+using Polars for the data and Matplotlib for the figure:
+
+```bash
+make analysis ANALYSIS=temporal LIST=all
+make analysis ANALYSIS=temporal LIST=netdev CONFIDENT_ONLY=1
+```
+
+It writes `output/analysis/temporal.png` and a monthly summary,
+`output/analysis/temporal.csv`. The figure has four panels:
+
+| Panel | What it shows |
+| --- | --- |
+| Patches per month | Evaluated patches vs. patches matched to a commit |
+| Match rate per month | Share of evaluated patches with a match and with a confident match |
+| Integration latency | Distribution of `commit_date - email_date`, in days, with the median |
+| Integration latency per month | Monthly median and interquartile range |
+
+`CONFIDENT_ONLY=1` restricts the latency panels to confident matches. It can
+also be run directly: `uv run python -m lkml_ground_truth.analysis.temporal --help`.
+
+Reading the figure: recent months naturally show lower match rates and shorter
+latencies, because their commits may not exist yet. Latency is also bounded by
+`matching.days_after`, and can be slightly negative since the candidate window
+starts `matching.days_before` days before the email date.
+
+## Adding a finding
+
+1. Create a function in `fixed.py`, using `scan_original()` and/or `scan_enriched()`.
+2. Document the question and how to interpret the result in the table above.
+3. Add the function to `ANALYSES`, run `make analysis ANALYSIS=<name>` and keep the code in Git;
+   the resulting CSV lives in `output/analysis/`.

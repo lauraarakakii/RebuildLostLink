@@ -17,6 +17,9 @@ RUN := $(CONTAINER) run --rm $(USER_FLAGS)
 REPO_VOLUME ?= $(CURDIR)/resources/linux/repo
 DATASET_VOLUME ?= $(CURDIR)/resources/dataset
 
+# Set ENRICH=0 to skip the automatic 'make enrich' after 'make run'.
+ENRICH ?= 1
+
 LIST ?=
 ANALYSIS ?= dataset_coverage
 RESULTS_DIR ?= output/analysis
@@ -92,6 +95,9 @@ run:
 			$(IMAGE) \
 			--config $(CONFIG); \
 	fi
+	@if [ "$(ENRICH)" != "0" ]; then \
+		$(MAKE) enrich; \
+	fi
 
 .PHONY: test
 test:
@@ -146,18 +152,32 @@ SQL ?=
 OUTPUT ?=
 FORMAT ?=
 LIMIT ?= 20
+CONFIDENT_ONLY ?=
 
 .PHONY: analysis
 analysis:
 	@if [ "$(notdir $(ANALYSIS))" = "sql_querier.py" ]; then \
-		$(MAKE) -C "$(ANALYSIS_DIR)" query \
-			REPO_ROOT="$(CURDIR)" \
-			CONFIG="$(abspath $(CONFIG))" \
-			LIST="$(if $(LIST),$(LIST),all)" \
-			SQL="$(SQL)" \
-			OUTPUT="$(OUTPUT)" \
-			FORMAT="$(FORMAT)" \
-			LIMIT="$(LIMIT)"; \
+		if ! command -v uv >/dev/null 2>&1; then \
+			echo "==> uv is required to run analysis queries."; \
+			exit 1; \
+		fi; \
+		uv run python -m lkml_ground_truth.analysis.sql_querier \
+			--config "$(abspath $(CONFIG))" \
+			--list "$(if $(LIST),$(LIST),all)" \
+			--limit "$(LIMIT)" \
+			$(if $(SQL),"$(SQL)") \
+			$(if $(OUTPUT),--output "$(OUTPUT)") \
+			$(if $(FORMAT),--format "$(FORMAT)"); \
+	elif [ "$(basename $(notdir $(ANALYSIS)))" = "temporal" ]; then \
+		if ! command -v uv >/dev/null 2>&1; then \
+			echo "==> uv is required to run the temporal analysis."; \
+			exit 1; \
+		fi; \
+		uv run python -m lkml_ground_truth.analysis.temporal \
+			--config "$(abspath $(CONFIG))" \
+			--list "$(if $(LIST),$(LIST),all)" \
+			--output "$(abspath $(RESULTS_DIR))/temporal.png" \
+			$(if $(filter 1,$(CONFIDENT_ONLY)),--confident-only); \
 	else \
 		$(MAKE) -C "$(ANALYSIS_DIR)" run \
 			REPO_ROOT="$(CURDIR)" \

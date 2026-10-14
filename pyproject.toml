@@ -15,6 +15,7 @@ dependencies = [
     "tqdm~=4.67",
     "dateparser~=1.2",
     "datafusion~=54.0.0",
+    "matplotlib~=3.10",
 ]
 
 [dependency-groups]

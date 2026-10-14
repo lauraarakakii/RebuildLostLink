@@ -142,11 +142,30 @@ enrich:
 			--config $(CONFIG) enrich; \
 	fi
 
+SQL ?=
+OUTPUT ?=
+FORMAT ?=
+LIMIT ?= 20
+
 .PHONY: analysis
 analysis:
-	@$(MAKE) -C $(ANALYSIS_DIR) run REPO_ROOT="$(CURDIR)" CONFIG="$(abspath $(CONFIG))" \
-		ANALYSIS="$(ANALYSIS)" LIST="$(if $(LIST),$(LIST),all)" \
-		RESULTS_DIR="$(abspath $(RESULTS_DIR))"
+	@if [ "$(notdir $(ANALYSIS))" = "sql_querier.py" ]; then \
+		$(MAKE) -C "$(ANALYSIS_DIR)" query \
+			REPO_ROOT="$(CURDIR)" \
+			CONFIG="$(abspath $(CONFIG))" \
+			LIST="$(if $(LIST),$(LIST),all)" \
+			SQL="$(SQL)" \
+			OUTPUT="$(OUTPUT)" \
+			FORMAT="$(FORMAT)" \
+			LIMIT="$(LIMIT)"; \
+	else \
+		$(MAKE) -C "$(ANALYSIS_DIR)" run \
+			REPO_ROOT="$(CURDIR)" \
+			CONFIG="$(abspath $(CONFIG))" \
+			ANALYSIS="$(ANALYSIS)" \
+			LIST="$(if $(LIST),$(LIST),all)" \
+			RESULTS_DIR="$(abspath $(RESULTS_DIR))"; \
+	fi
 
 .PHONY: clean
 clean:

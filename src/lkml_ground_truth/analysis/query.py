@@ -1,10 +1,8 @@
 """SQL queries against the 'original' and 'enriched' Parquet datasets.
 
-Both datasets are laid out as Hive partitions (``list=<name>/...``), the same
-convention used by MailingListsHeritage. This module runs queries with
-Apache Arrow DataFusion (``datafusion.SessionContext``) -- the same engine
-used by ``analysis/src/mlh_analysis/sql_querier.py`` in MLH -- instead of
-eagerly reading every ``.parquet`` file with Polars.
+Both datasets are laid out as Hive partitions (``list=<name>/...``).
+This module runs queries with Apache Arrow DataFusion 
+(``datafusion.SessionContext``).
 
 Only the ``list=<name>`` directories for the *requested* lists are ever
 registered, and registration only inspects Parquet footers, so it stays fast

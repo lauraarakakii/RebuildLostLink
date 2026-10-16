@@ -18,12 +18,15 @@ from ..config import DEFAULT_CONFIG_PATH, Config, load_config
 from . import (
     commit_reuse,
     dataset_coverage,
+    latency_distribution,
+    latency_per_month,
     match_coverage,
     match_errors,
+    match_rate_per_month,
     matched_pairs,
+    patches_per_month,
     score_bands,
     sql_querier,
-    temporal,
 )
 
 logger = logging.getLogger(__name__)
@@ -38,7 +41,10 @@ ANALYSIS_NAMES = (
     "match_errors",
     "commit_reuse",
     "matched_pairs",
-    "temporal",
+    "patches_per_month",
+    "match_rate_per_month",
+    "latency_distribution",
+    "latency_per_month",
     "sql_querier",
 )
 
@@ -70,7 +76,15 @@ def build_registry(options: RunOptions) -> dict[str, Callable[[], None]]:
         "match_errors": lambda: match_errors.main(config, out, lists),
         "commit_reuse": lambda: commit_reuse.main(config, out, lists),
         "matched_pairs": lambda: matched_pairs.main(config, out, lists),
-        "temporal": lambda: temporal.main(
+        # one chart per analysis
+        "patches_per_month": lambda: patches_per_month.main(
+            config, out, lists, confident_only=options.confident_only
+        ),
+        "match_rate_per_month": lambda: match_rate_per_month.main(config, out, lists),
+        "latency_distribution": lambda: latency_distribution.main(
+            config, out, lists, confident_only=options.confident_only
+        ),
+        "latency_per_month": lambda: latency_per_month.main(
             config, out, lists, confident_only=options.confident_only
         ),
         # these below will not run by default
@@ -148,7 +162,8 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--confident-only",
         action="store_true",
-        help="temporal: use only confident matches (score >= matching.autoaccept) for latency.",
+        help="patches_per_month, latency_distribution, latency_per_month: use only "
+        "confident matches (score >= matching.autoaccept).",
     )
     parser.add_argument(
         "--sql", help="sql_querier: SQL to run once and exit (omit for the interactive REPL)."

@@ -27,7 +27,7 @@ This project consists of four main components:
 |-----------|-------------|----------|
 | **[Matching Pipeline](src/lkml_ground_truth/)** | Compares each patch email with candidate commits and writes one CSV of matches per mailing list | Python |
 | **[Enrichment](src/lkml_ground_truth/enrich.py)** | Persists the match results as Parquet partitioned by mailing list | Python |
-| **[Analysis](src/lkml_ground_truth/analysis/)** | One module per analysis (Polars reports, a temporal figure and an interactive DataFusion SQL REPL), run by a single orchestrator | Python |
+| **[Analysis](src/lkml_ground_truth/analysis/)** | One module per analysis (Polars reports, one chart per analysis and an interactive DataFusion SQL REPL), run by a single orchestrator | Python |
 | **[Extra Scripts](scripts/)** | Stand-alone export, integration and manual review utilities | Python |
 
 Each component has its own detailed documentation:
@@ -345,7 +345,7 @@ make analysis
 
 # A single analysis, for one or more lists
 make analysis ANALYSIS=commit_reuse LIST=netdev
-make analysis ANALYSIS=temporal LIST=netdev,bpf CONFIDENT_ONLY=1
+make analysis ANALYSIS=latency_per_month LIST=netdev,bpf CONFIDENT_ONLY=1
 
 # Interactive SQL REPL over the 'original' and 'enriched' tables
 make analysis ANALYSIS=sql_querier LIST=all
@@ -364,7 +364,10 @@ An analysis that fails is logged and does not stop the others. `sql_querier` is 
 | `match_errors` | Candidate-search errors grouped, to diagnose systematic problems |
 | `commit_reuse` | Commits linked to several emails: series, resends or false positives worth reviewing |
 | `matched_pairs` | Email/commit pairs with both dates, for integration-latency analysis |
-| `temporal` | SVG figure and monthly CSV: patches, match rate and integration latency over time |
+| `patches_per_month` | One chart (SVG + CSV): evaluated vs. matched patches per month |
+| `match_rate_per_month` | One chart (SVG + CSV): share of patches with a match and with a confident match, per month |
+| `latency_distribution` | One chart (SVG): histogram of integration latency, with the median |
+| `latency_per_month` | One chart (SVG + CSV): monthly median latency with the interquartile range |
 | `sql_querier` | Interactive SQL REPL, or a one-off query, over `original` and `enriched` (non-default) |
 
 See the [Analysis Documentation](src/lkml_ground_truth/analysis/README.md) for all options and how to add a new analysis.

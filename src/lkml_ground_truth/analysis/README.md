@@ -60,15 +60,15 @@ make analysis
 
 # Run a single analysis by name
 make analysis ANALYSIS=score_bands
-make analysis ANALYSIS=temporal LIST=netdev
-make analysis ANALYSIS=temporal LIST=netdev,bpf CONFIDENT_ONLY=1
+make analysis ANALYSIS=latency_per_month LIST=netdev
+make analysis ANALYSIS=latency_per_month LIST=netdev,bpf CONFIDENT_ONLY=1
 
 # Interactive SQL
 make analysis ANALYSIS=sql_querier LIST=all
 make analysis ANALYSIS=sql_querier LIST=netdev SQL='SELECT * FROM enriched LIMIT 10'
 
 # Directly, without Make
-uv run lkml-ground-truth --config config.toml analysis --analysis temporal --list netdev
+uv run lkml-ground-truth --config config.toml analysis --analysis latency_per_month --list netdev
 uv run python -m lkml_ground_truth.analysis --config config.toml
 ```
 
@@ -118,18 +118,20 @@ Commits linked to several emails of the same list; candidates for series, resend
 
 Matched email/commit pairs with both dates, useful to analyze integration latency and to validate individual cases.
 
-### temporal.py
+### Charts (one analysis = one chart = one image)
 
-Studies the results over time, by month of the email date. Writes `temporal.csv` (monthly summary) and `temporal.svg`, a figure with four panels:
+Four analyses study the results over time, by month of the email date. Each one draws **a single chart** and saves **a single image**; the shared data queries live in `temporal_data.py` and the matplotlib helpers in `plotting.py` (neither is an analysis).
 
-| Panel | What it shows |
-|-------|---------------|
-| Patches per Month | Evaluated patches vs. patches matched to a commit |
-| Match Rate per Month | Share of evaluated patches with a match and with a confident match |
-| Integration Latency | Distribution of `commit_date - email_date`, in days, with the median |
-| Integration Latency per Month | Monthly median and interquartile range |
+| Analysis | Image | CSV | What it shows |
+|----------|-------|-----|---------------|
+| `patches_per_month` | `patches_per_month.svg` | `patches_per_month.csv` | Evaluated patches vs. patches matched to a commit |
+| `match_rate_per_month` | `match_rate_per_month.svg` | `match_rate_per_month.csv` | Share of evaluated patches with a match and with a confident match |
+| `latency_distribution` | `latency_distribution.svg` | none | Distribution of `commit_date - email_date`, in days, up to P99, with the median |
+| `latency_per_month` | `latency_per_month.svg` | `latency_per_month.csv` | Monthly median latency and interquartile range |
 
-Use `CONFIDENT_ONLY=1` to restrict the latency panels to confident matches. Recent months naturally show lower match rates and shorter latencies, because their commits may not exist yet. Latency is also bounded by `matching.days_after`, and can be slightly negative since the candidate window starts `matching.days_before` days before the email date.
+Use `CONFIDENT_ONLY=1` to restrict `patches_per_month`, `latency_distribution` and `latency_per_month` to confident matches. Recent months naturally show lower match rates and shorter latencies, because their commits may not exist yet. Latency is also bounded by `matching.days_after`, and can be slightly negative since the candidate window starts `matching.days_before` days before the email date.
+
+To add a new chart, create a module that exposes `main(config, output_dir, list_name)`, draw it with `plotting.new_chart()` / `plotting.save_chart()` (one axes per figure) and register it in `main.py`.
 
 ### sql_querier.py
 
@@ -152,8 +154,13 @@ output/analysis/
 ├── match_errors.csv
 ├── commit_reuse.csv
 ├── matched_pairs.csv
-├── temporal.csv
-└── temporal.svg
+├── patches_per_month.csv
+├── patches_per_month.svg
+├── match_rate_per_month.csv
+├── match_rate_per_month.svg
+├── latency_distribution.svg
+├── latency_per_month.csv
+└── latency_per_month.svg
 ```
 
 `commit_date` is the Git *committer* date, in ISO 8601. It is only present in pipeline runs made after this column was added, so temporal analyses need a recent run.
@@ -166,7 +173,7 @@ Paths come from `config.toml` (`paths.dataset_root`, `paths.enriched_root`). Eve
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `ANALYSIS` | *(empty)* | Run a single analysis by name instead of all default ones. Valid names: `dataset_coverage`, `match_coverage`, `score_bands`, `match_errors`, `commit_reuse`, `matched_pairs`, `temporal`, `sql_querier`†. († non-default, only runs when explicitly selected) |
+| `ANALYSIS` | *(empty)* | Run a single analysis by name instead of all default ones. Valid names: `dataset_coverage`, `match_coverage`, `score_bands`, `match_errors`, `commit_reuse`, `matched_pairs`, `patches_per_month`, `match_rate_per_month`, `latency_distribution`, `latency_per_month`, `sql_querier`†. († non-default, only runs when explicitly selected) |
 | `LIST` | `all` | Mailing list(s) to analyze: a name, a comma-separated list (`netdev,bpf`) or `all` |
 | `RESULTS_DIR` | `output/analysis` | Directory for analysis output |
 | `CONFIG` | `config.toml` | Configuration file |
@@ -175,7 +182,7 @@ Paths come from `config.toml` (`paths.dataset_root`, `paths.enriched_root`). Eve
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `CONFIDENT_ONLY` | *(empty)* | Set to `1` to use only confident matches for latency. Used by: `temporal` |
+| `CONFIDENT_ONLY` | *(empty)* | Set to `1` to use only confident matches for latency. Used by: `patches_per_month`, `latency_distribution`, `latency_per_month` |
 | `SQL` | *(empty)* | SQL to run once and exit; omit for the interactive REPL. Used by: `sql_querier` |
 | `OUTPUT` | *(empty)* | File to save the SQL result to. Used by: `sql_querier` |
 | `FORMAT` | *(inferred)* | `csv`, `parquet`, `json` or `ndjson`; inferred from `OUTPUT` when omitted. Used by: `sql_querier` |
@@ -190,7 +197,7 @@ The same options are available as `uv run lkml-ground-truth --config config.toml
 | `-a, --analysis <NAME>` | Analysis to run (default: all default analyses) |
 | `-l, --list <NAMES>` | List name, comma-separated names, or `all` (default) |
 | `-o, --output-dir <DIR>` | Output directory (default: `output/analysis`) |
-| `--confident-only` | `temporal`: confident matches only |
+| `--confident-only` | `patches_per_month`, `latency_distribution`, `latency_per_month`: confident matches only |
 | `--sql <SQL>` | `sql_querier`: query to run once |
 | `--sql-output <PATH>` | `sql_querier`: save the result |
 | `--sql-format <FMT>` | `sql_querier`: output format |
@@ -208,7 +215,7 @@ uv run python -m lkml_ground_truth.analysis --config config.toml
 
 # Run a single analysis, with a custom output directory
 uv run python -m lkml_ground_truth.analysis --config config.toml \
-  --analysis temporal --list netdev --output-dir /tmp/lkml-analysis
+  --analysis latency_per_month --list netdev --output-dir /tmp/lkml-analysis
 ```
 
 ### Tests and Lint

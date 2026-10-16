@@ -69,7 +69,7 @@ def test_one_failure_does_not_stop_the_others():
     failures = run_analyses(_registry(calls, failing={"score_bands"}))
 
     assert failures == 1
-    assert "temporal" in calls  # ran after the failing analysis
+    assert "latency_per_month" in calls  # ran after the failing analysis
 
 
 def test_named_analysis_errors_propagate():
@@ -85,9 +85,17 @@ def test_cli_runs_every_default_analysis_end_to_end(analysis_config, tmp_path):
 
     assert code == 0
     produced = {p.name for p in out.iterdir()}
-    expected = {f"{n}.csv" for n in ANALYSIS_NAMES if n not in ("sql_querier", "temporal")}
+    charts = (
+        "patches_per_month",
+        "match_rate_per_month",
+        "latency_distribution",
+        "latency_per_month",
+    )
+    expected = {f"{n}.csv" for n in ANALYSIS_NAMES if n not in ("sql_querier", *charts)}
     assert expected <= produced
-    assert {"temporal.csv", "temporal.svg"} <= produced
+    # one chart per analysis: exactly one image each
+    assert {f"{n}.svg" for n in charts} <= produced
+    assert len({p for p in produced if p.endswith(".svg")}) == len(charts)
 
 
 def test_cli_limits_to_comma_separated_lists(analysis_config, tmp_path):

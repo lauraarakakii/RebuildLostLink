@@ -4,7 +4,9 @@ import pytest
 from lkml_ground_truth.analysis import (
     commit_reuse,
     dataset_coverage,
+    discussion_context,
     match_coverage,
+    patch_size_outcomes,
     score_bands,
 )
 
@@ -82,4 +84,36 @@ def test_commit_reuse_lists_commits_with_several_emails(monkeypatch):
 
     assert result.select("best_commit", "matched_emails").to_dicts() == [
         {"best_commit": "h1", "matched_emails": 2}
+    ]
+
+
+def test_discussion_context_joins_original_thread_metadata(analysis_config):
+    result = discussion_context.build(analysis_config, "all").collect().sort("discussion_context")
+
+    assert result.select(
+        "discussion_context", "source_patches", "evaluated_patches", "matches", "confident_matches"
+    ).to_dicts() == [
+        {
+            "discussion_context": "initial_submission",
+            "source_patches": 3,
+            "evaluated_patches": 2,
+            "matches": 1,
+            "confident_matches": 1,
+        },
+        {
+            "discussion_context": "reply_or_revision",
+            "source_patches": 2,
+            "evaluated_patches": 2,
+            "matches": 1,
+            "confident_matches": 0,
+        },
+    ]
+
+
+def test_patch_size_outcomes_counts_changed_lines_from_original(analysis_config):
+    result = patch_size_outcomes.build(analysis_config, "all").collect().sort("size_band")
+
+    assert result.select("size_band", "source_patches", "matches").to_dicts() == [
+        {"size_band": "medium_21_100", "source_patches": 1, "matches": 1},
+        {"size_band": "small_1_20", "source_patches": 4, "matches": 1},
     ]

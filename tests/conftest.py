@@ -25,6 +25,15 @@ def analysis_config(tmp_path):
                 datetime(2024, 2, 6),
                 datetime(2024, 2, 6),
             ],
+            "code": [
+                ["diff --git a/a b/a\n+added\n-removed"],
+                ["diff --git a/b b/b\n" + "+added\n" * 30 + "-removed"],
+                ["diff --git a/c b/c\n+added\n-removed"],
+                ["diff --git a/d b/d\n+added\n-removed"],
+                ["diff --git a/e b/e\n+added\n-removed"],
+            ],
+            "in_reply_to": [None, "a", None, "c", None],
+            "references": [[], ["a"], [], ["c"], []],
         }
     ).write_parquet(original_root / "list=netdev" / "part.parquet")
 

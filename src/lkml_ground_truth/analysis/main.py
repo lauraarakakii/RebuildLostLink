@@ -18,6 +18,7 @@ from ..config import DEFAULT_CONFIG_PATH, Config, load_config
 from . import (
     commit_reuse,
     dataset_coverage,
+    discussion_context,
     integration_cdf,
     latency_distribution,
     latency_per_month,
@@ -25,6 +26,7 @@ from . import (
     match_errors,
     match_rate_per_month,
     matched_pairs,
+    patch_size_outcomes,
     patches_per_month,
     score_bands,
     sql_querier,
@@ -42,6 +44,8 @@ ANALYSIS_NAMES = (
     "match_errors",
     "commit_reuse",
     "matched_pairs",
+    "discussion_context",
+    "patch_size_outcomes",
     "patches_per_month",
     "match_rate_per_month",
     "latency_distribution",
@@ -78,6 +82,8 @@ def build_registry(options: RunOptions) -> dict[str, Callable[[], None]]:
         "match_errors": lambda: match_errors.main(config, out, lists),
         "commit_reuse": lambda: commit_reuse.main(config, out, lists),
         "matched_pairs": lambda: matched_pairs.main(config, out, lists),
+        "discussion_context": lambda: discussion_context.main(config, out, lists),
+        "patch_size_outcomes": lambda: patch_size_outcomes.main(config, out, lists),
         # one chart per analysis
         "patches_per_month": lambda: patches_per_month.main(
             config, out, lists, confident_only=options.confident_only

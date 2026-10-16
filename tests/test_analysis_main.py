@@ -90,6 +90,7 @@ def test_cli_runs_every_default_analysis_end_to_end(analysis_config, tmp_path):
         "match_rate_per_month",
         "latency_distribution",
         "latency_per_month",
+        "integration_cdf",
     )
     expected = {f"{n}.csv" for n in ANALYSIS_NAMES if n not in ("sql_querier", *charts)}
     assert expected <= produced

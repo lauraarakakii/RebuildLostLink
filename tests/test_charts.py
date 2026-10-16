@@ -4,6 +4,7 @@ import polars as pl
 import pytest
 
 from lkml_ground_truth.analysis import (
+    integration_cdf,
     latency_distribution,
     latency_per_month,
     match_rate_per_month,
@@ -16,6 +17,7 @@ CHART_MODULES = [
     match_rate_per_month,
     latency_distribution,
     latency_per_month,
+    integration_cdf,
 ]
 
 
@@ -54,6 +56,7 @@ def test_without_data_writes_nothing(module, analysis_config, tmp_path, monkeypa
     monkeypatch.setattr(temporal_data, "build", lambda *args: empty)
     monkeypatch.setattr(temporal_data, "matched_latency", lambda *args: empty)
     monkeypatch.setattr(latency_distribution, "matched_latency", lambda *args: empty)
+    monkeypatch.setattr(integration_cdf, "build", lambda *args: empty)
 
     module.main(analysis_config, str(tmp_path / "out"), "all")
 
@@ -66,3 +69,20 @@ def test_confident_only_changes_matched_series(analysis_config, tmp_path):
     patches_per_month.main(analysis_config, str(out), "all", confident_only=True)
 
     assert (out / "patches_per_month.svg").exists()
+
+
+def test_integration_cdf_exports_empirical_cumulative_share(analysis_config):
+    cdf = integration_cdf.build(analysis_config, "all").collect()
+
+    assert cdf.to_dicts() == [
+        {"latency_days": pytest.approx(2.5), "integrated_share": pytest.approx(0.5)},
+        {"latency_days": pytest.approx(10.0), "integrated_share": pytest.approx(1.0)},
+    ]
+
+
+def test_integration_cdf_can_use_only_confident_matches(analysis_config):
+    cdf = integration_cdf.build(analysis_config, "all", confident_only=True).collect()
+
+    assert cdf.to_dicts() == [
+        {"latency_days": pytest.approx(2.5), "integrated_share": pytest.approx(1.0)}
+    ]

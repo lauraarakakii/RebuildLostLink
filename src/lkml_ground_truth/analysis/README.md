@@ -4,7 +4,7 @@ Reproducible analyses over the matching results: how many patch emails were link
 
 ## Overview
 
-Each analysis is a small module that reads the `original` (MLH dataset) and `enriched` (matching results) Parquet tables, and writes its result to an output directory. An orchestrator runs every default analysis, or a single one by name. Data is handled with Polars lazy frames, so nothing is copied and large datasets stay manageable.
+Each analysis is a small module that reads the `original` (MLH dataset) and `enriched` (matching results) Parquet tables, and writes its result to an output directory. An orchestrator runs every default analysis, or a single one by name. Data is handled with Polars lazy frames, so nothing is copied and large datasets stay manageable. The integration-time analyses make the linked email/commit pairs useful for empirical studies of Linux patch lifecycles.
 
 ```
 ┌─────────────────┐     ┌─────────────────┐
@@ -120,7 +120,7 @@ Matched email/commit pairs with both dates, useful to analyze integration latenc
 
 ### Charts (one analysis = one chart = one image)
 
-Four analyses study the results over time, by month of the email date. Each one draws **a single chart** and saves **a single image**; the shared data queries live in `temporal_data.py` and the matplotlib helpers in `plotting.py` (neither is an analysis).
+Five analyses study the results over time or by integration latency. Each one draws **a single chart** and saves **a single image**; the shared data queries live in `temporal_data.py` and the matplotlib helpers in `plotting.py` (neither is an analysis).
 
 | Analysis | Image | CSV | What it shows |
 |----------|-------|-----|---------------|
@@ -128,8 +128,9 @@ Four analyses study the results over time, by month of the email date. Each one 
 | `match_rate_per_month` | `match_rate_per_month.svg` | `match_rate_per_month.csv` | Share of evaluated patches with a match and with a confident match |
 | `latency_distribution` | `latency_distribution.svg` | none | Distribution of `commit_date - email_date`, in days, up to P99, with the median |
 | `latency_per_month` | `latency_per_month.svg` | `latency_per_month.csv` | Monthly median latency and interquartile range |
+| `integration_cdf` | `integration_cdf.svg` | `integration_cdf.csv` | Empirical share of linked patches integrated by each elapsed time; supports direct comparison of 7-, 30- and 90-day integration rates across lists |
 
-Use `CONFIDENT_ONLY=1` to restrict `patches_per_month`, `latency_distribution` and `latency_per_month` to confident matches. Recent months naturally show lower match rates and shorter latencies, because their commits may not exist yet. Latency is also bounded by `matching.days_after`, and can be slightly negative since the candidate window starts `matching.days_before` days before the email date.
+Use `CONFIDENT_ONLY=1` to restrict `patches_per_month`, `latency_distribution`, `latency_per_month` and `integration_cdf` to confident matches. Recent months naturally show lower match rates and shorter latencies, because their commits may not exist yet. Latency is also bounded by `matching.days_after`, and can be slightly negative since the candidate window starts `matching.days_before` days before the email date. The CDF is conditional on linked patches, so it describes observed integration time rather than a survival estimate for every submitted patch.
 
 To add a new chart, create a module that exposes `main(config, output_dir, list_name)`, draw it with `plotting.new_chart()` / `plotting.save_chart()` (one axes per figure) and register it in `main.py`.
 
@@ -160,7 +161,9 @@ output/analysis/
 ├── match_rate_per_month.svg
 ├── latency_distribution.svg
 ├── latency_per_month.csv
-└── latency_per_month.svg
+├── latency_per_month.svg
+├── integration_cdf.csv
+└── integration_cdf.svg
 ```
 
 `commit_date` is the Git *committer* date, in ISO 8601. It is only present in pipeline runs made after this column was added, so temporal analyses need a recent run.
@@ -173,7 +176,7 @@ Paths come from `config.toml` (`paths.dataset_root`, `paths.enriched_root`). Eve
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `ANALYSIS` | *(empty)* | Run a single analysis by name instead of all default ones. Valid names: `dataset_coverage`, `match_coverage`, `score_bands`, `match_errors`, `commit_reuse`, `matched_pairs`, `patches_per_month`, `match_rate_per_month`, `latency_distribution`, `latency_per_month`, `sql_querier`†. († non-default, only runs when explicitly selected) |
+| `ANALYSIS` | *(empty)* | Run a single analysis by name instead of all default ones. Valid names: `dataset_coverage`, `match_coverage`, `score_bands`, `match_errors`, `commit_reuse`, `matched_pairs`, `patches_per_month`, `match_rate_per_month`, `latency_distribution`, `latency_per_month`, `integration_cdf`, `sql_querier`†. († non-default, only runs when explicitly selected) |
 | `LIST` | `all` | Mailing list(s) to analyze: a name, a comma-separated list (`netdev,bpf`) or `all` |
 | `RESULTS_DIR` | `output/analysis` | Directory for analysis output |
 | `CONFIG` | `config.toml` | Configuration file |
@@ -182,7 +185,7 @@ Paths come from `config.toml` (`paths.dataset_root`, `paths.enriched_root`). Eve
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `CONFIDENT_ONLY` | *(empty)* | Set to `1` to use only confident matches for latency. Used by: `patches_per_month`, `latency_distribution`, `latency_per_month` |
+| `CONFIDENT_ONLY` | *(empty)* | Set to `1` to use only confident matches for latency. Used by: `patches_per_month`, `latency_distribution`, `latency_per_month`, `integration_cdf` |
 | `SQL` | *(empty)* | SQL to run once and exit; omit for the interactive REPL. Used by: `sql_querier` |
 | `OUTPUT` | *(empty)* | File to save the SQL result to. Used by: `sql_querier` |
 | `FORMAT` | *(inferred)* | `csv`, `parquet`, `json` or `ndjson`; inferred from `OUTPUT` when omitted. Used by: `sql_querier` |
@@ -197,7 +200,7 @@ The same options are available as `uv run lkml-ground-truth --config config.toml
 | `-a, --analysis <NAME>` | Analysis to run (default: all default analyses) |
 | `-l, --list <NAMES>` | List name, comma-separated names, or `all` (default) |
 | `-o, --output-dir <DIR>` | Output directory (default: `output/analysis`) |
-| `--confident-only` | `patches_per_month`, `latency_distribution`, `latency_per_month`: confident matches only |
+| `--confident-only` | `patches_per_month`, `latency_distribution`, `latency_per_month`, `integration_cdf`: confident matches only |
 | `--sql <SQL>` | `sql_querier`: query to run once |
 | `--sql-output <PATH>` | `sql_querier`: save the result |
 | `--sql-format <FMT>` | `sql_querier`: output format |

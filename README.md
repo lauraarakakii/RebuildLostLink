@@ -27,7 +27,7 @@ This project consists of four main components:
 |-----------|-------------|----------|
 | **[Matching Pipeline](src/lkml_ground_truth/)** | Compares each patch email with candidate commits and writes one CSV of matches per mailing list | Python |
 | **[Enrichment](src/lkml_ground_truth/enrich.py)** | Persists the match results as Parquet partitioned by mailing list | Python |
-| **[Analysis](src/lkml_ground_truth/analysis/)** | One module per analysis (Polars reports, one chart per analysis and an interactive DataFusion SQL REPL), run by a single orchestrator | Python |
+| **[Analysis](src/lkml_ground_truth/analysis/)** | One module per analysis (Polars reports, integration-time charts and an interactive DataFusion SQL REPL), run by a single orchestrator | Python |
 | **[Extra Scripts](scripts/)** | Stand-alone export, integration and manual review utilities | Python |
 
 Each component has its own detailed documentation:

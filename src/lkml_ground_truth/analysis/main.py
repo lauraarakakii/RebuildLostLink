@@ -18,6 +18,7 @@ from ..config import DEFAULT_CONFIG_PATH, Config, load_config
 from . import (
     commit_reuse,
     dataset_coverage,
+    integration_cdf,
     latency_distribution,
     latency_per_month,
     match_coverage,
@@ -45,6 +46,7 @@ ANALYSIS_NAMES = (
     "match_rate_per_month",
     "latency_distribution",
     "latency_per_month",
+    "integration_cdf",
     "sql_querier",
 )
 
@@ -85,6 +87,9 @@ def build_registry(options: RunOptions) -> dict[str, Callable[[], None]]:
             config, out, lists, confident_only=options.confident_only
         ),
         "latency_per_month": lambda: latency_per_month.main(
+            config, out, lists, confident_only=options.confident_only
+        ),
+        "integration_cdf": lambda: integration_cdf.main(
             config, out, lists, confident_only=options.confident_only
         ),
         # these below will not run by default

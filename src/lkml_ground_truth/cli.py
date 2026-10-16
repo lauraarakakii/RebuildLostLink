@@ -3,14 +3,12 @@
 from __future__ import annotations
 
 import argparse
-import dataclasses
 import logging
 
+from .analysis import main as analysis_main
 from .analysis.query import run as run_query_command
 from .config import DEFAULT_CONFIG_PATH, load_config
-from .enrich import run as run_enrich
-from .pipeline import run as run_pipeline
-from .repo_setup import ensure_repo
+from .steps import main as steps_main
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 logger = logging.getLogger(__name__)
@@ -33,16 +31,18 @@ def build_arg_parser() -> argparse.ArgumentParser:
 
     subparsers = parser.add_subparsers(dest="command")
 
-    subparsers.add_parser(
+    run_parser = subparsers.add_parser(
         "run",
-        help="Run the full pipeline (the default when no subcommand is given)."
+        help="Run every step in order: repo -> matching -> enrich "
+        "(the default when no subcommand is given).",
     )
+    steps_main.add_arguments(run_parser)
 
     clone_parser = subparsers.add_parser(
         "clone-repo",
         help=(
             "Clone (or validate) the configured kernel repository at "
-            "'paths.repo_path' without running the pipeline."
+            "'paths.repo_path' without running the other steps."
         ),
     )
     clone_parser.add_argument(
@@ -53,8 +53,16 @@ def build_arg_parser() -> argparse.ArgumentParser:
     subparsers.add_parser( 
         "enrich",
         help="Join the match CSV back into the original dataset by message_id " \
-        "and write enriched Parquet data to 'paths.enriched_root'. Run after 'run'."
+        "and write enriched Parquet data to 'paths.enriched_root'. "
+        "Already part of 'run'; use this to re-run it on its own."
     )
+
+    analysis_parser = subparsers.add_parser(
+        "analysis",
+        help="Run analyses over the original and enriched datasets "
+        "(all default analyses unless --analysis is given).",
+    )
+    analysis_main.add_arguments(analysis_parser)
 
     query_parser = subparsers.add_parser( 
         "query",
@@ -100,24 +108,28 @@ def build_arg_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def main(argv: list[str] | None = None) -> None:
+def _run_step(config, step: str, **options) -> int:
+    registry = steps_main.build_registry(steps_main.RunOptions(config=config, **options))
+    return steps_main.run_steps(registry, step)
+
+
+def main(argv: list[str] | None = None) -> int:
     args = build_arg_parser().parse_args(argv)
     config = load_config(args.config)
 
     command = args.command or "run"
 
+    if command == "run":
+        return steps_main.run(config, args)
+
     if command == "clone-repo":
-        repo_config = config.repo
-        if args.force and not repo_config.auto_clone:
-            # An explicit user action overrides only auto_clone. ensure_repo()
-            # still skips cloning when repo_path already contains a repository.
-            repo_config = dataclasses.replace(repo_config, auto_clone=True)
-        ensure_repo(repo_config, config.paths.repo_path)
-        return
+        return _run_step(config, "repo", force_clone=args.force)
 
     if command == "enrich":
-        run_enrich(config)
-        return
+        return _run_step(config, "enrich")
+
+    if command == "analysis":
+        return analysis_main.run(config, args)
 
     if command == "query":
         # Without SQL, ``run`` opens a REPL and preserves its SQLContext for
@@ -130,10 +142,10 @@ def main(argv: list[str] | None = None) -> None:
             fmt=args.fmt,
             limit=args.limit,
         )
-        return
+        return 0
 
-    run_pipeline(config)
+    raise AssertionError(f"Unhandled command: {command}")
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

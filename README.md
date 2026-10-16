@@ -1,4 +1,4 @@
-# RebuildLostLink - Link Linux Kernel Patch Emails to Their Commits
+# LKML Ground Truth - Link Linux Kernel Patch Emails to Their Commits
 
 Match patch emails from a [MailingListsHeritage](https://gitlab.com/ccsl-usp/codev/MailingListsHeritage) (MLH) Parquet dataset to the commits that integrate them into a Linux Git repository, producing a ground truth of "which email became which commit".
 
@@ -27,7 +27,7 @@ This project consists of four main components:
 |-----------|-------------|----------|
 | **[Matching Pipeline](src/lkml_ground_truth/)** | Compares each patch email with candidate commits and writes one CSV of matches per mailing list | Python |
 | **[Enrichment](src/lkml_ground_truth/enrich.py)** | Persists the match results as Parquet partitioned by mailing list | Python |
-| **[Analysis](src/lkml_ground_truth/analysis/)** | Fixed Polars reports and an interactive DataFusion SQL REPL over the results | Python |
+| **[Analysis](src/lkml_ground_truth/analysis/)** | One module per analysis (Polars reports, a temporal figure and an interactive DataFusion SQL REPL), run by a single orchestrator | Python |
 | **[Extra Scripts](scripts/)** | Stand-alone export, integration and manual review utilities | Python |
 
 Each component has its own detailed documentation:
@@ -127,10 +127,25 @@ rebuild_index    = false # true forces a rebuild of the commit index
 ### Step 3: Run the Pipeline
 
 ```bash
-make repo       # optional when repo_path is already a Linux clone
-make run        # match patch emails to commits, then enrich automatically
-make analysis ANALYSIS=dataset_coverage LIST=all
+make run        # run every step in order: repo -> matching -> enrich
+make analysis   # run every default analysis
 ```
+
+`make run` is made of three steps. Run just one with `STEP=<name>`:
+
+| Step | What it does |
+|------|--------------|
+| `repo` | Validates the Linux clone at `paths.repo_path`, cloning it when `repo.auto_clone` is true |
+| `matching` | Links each patch email to its best commit, writing one CSV per list |
+| `enrich` | Persists the match CSVs as Parquet partitioned by list |
+
+```bash
+make run STEP=matching   # only the matching
+make run STEP=enrich     # re-run only the enrichment
+make repo                # clone the repository even when auto_clone is false
+```
+
+The steps depend on each other, so if one fails the run stops there instead of continuing.
 
 The first `make run` builds the file-to-commit index in a single `git log --name-only` pass over the whole repository (a few minutes on the full kernel history) and caches it at `paths.commit_index_cache`. Later runs reuse it.
 
@@ -207,12 +222,14 @@ The root [`Makefile`](Makefile) orchestrates the whole project. Run commands fro
 |---------|-------------|
 | `make` or `make all` | Run the matching pipeline |
 | `make config` | Create `config.toml` from `example_config.toml` |
-| `make repo` | Clone or validate the Linux repository |
-| `make run` | Run patch-email to commit matching, then run `make enrich` automatically (`ENRICH=0` to skip) |
-| `make enrich` | Write enriched Parquet results (already done by `make run`; use it to re-run on its own) |
-| `make analysis ANALYSIS=<name> LIST=<name>` | Export a fixed Polars report to `output/analysis/` |
-| `make analysis ANALYSIS=sql_querier.py LIST=<name>` | Open the interactive DataFusion SQL REPL |
-| `make analysis ANALYSIS=sql_querier.py LIST=<name> SQL='...'` | Run a single SQL query and exit |
+| `make repo` | Clone the Linux repository (even when `repo.auto_clone` is false) or validate it |
+| `make run` | Run every step in order: `repo` -> `matching` -> `enrich` |
+| `make run STEP=<name>` | Run a single step (`repo`, `matching` or `enrich`) |
+| `make enrich` | Re-run only the enrichment (same as `make run STEP=enrich`) |
+| `make analysis` | Run every default analysis over all lists, saving results to `output/analysis/` |
+| `make analysis ANALYSIS=<name> LIST=<names>` | Run a single analysis; `LIST` takes a name, a comma-separated list or `all` |
+| `make analysis ANALYSIS=sql_querier LIST=<names>` | Open the interactive DataFusion SQL REPL |
+| `make analysis ANALYSIS=sql_querier SQL='...'` | Run a single SQL query and exit |
 | `make test` | Run all tests (via nox) |
 | `make lint` | Run static checks (ruff) |
 | `make fmt` | Format the code (ruff) |
@@ -323,15 +340,21 @@ Open `http://localhost:8000`. Each answer is saved immediately to an append-only
 Reproducible analyses over the matching results live in [`src/lkml_ground_truth/analysis/`](src/lkml_ground_truth/analysis/). Run them after `make run` (which already runs `make enrich`):
 
 ```bash
-# Fixed report, exported as CSV to output/analysis/
+# Every default analysis, results in output/analysis/
+make analysis
+
+# A single analysis, for one or more lists
 make analysis ANALYSIS=commit_reuse LIST=netdev
+make analysis ANALYSIS=temporal LIST=netdev,bpf CONFIDENT_ONLY=1
 
 # Interactive SQL REPL over the 'original' and 'enriched' tables
-make analysis ANALYSIS=sql_querier.py LIST=all
+make analysis ANALYSIS=sql_querier LIST=all
 
 # One-off SQL query
-make analysis ANALYSIS=sql_querier.py LIST=netdev SQL='SELECT * FROM enriched LIMIT 10'
+make analysis ANALYSIS=sql_querier LIST=netdev SQL='SELECT * FROM enriched LIMIT 10'
 ```
+
+An analysis that fails is logged and does not stop the others. `sql_querier` is the only non-default analysis: it runs only when selected.
 
 | Analysis | What it reveals |
 |----------|-----------------|
@@ -341,17 +364,30 @@ make analysis ANALYSIS=sql_querier.py LIST=netdev SQL='SELECT * FROM enriched LI
 | `match_errors` | Candidate-search errors grouped, to diagnose systematic problems |
 | `commit_reuse` | Commits linked to several emails: series, resends or false positives worth reviewing |
 | `matched_pairs` | Email/commit pairs with both dates, for integration-latency analysis |
-| `temporal` | Figure and monthly CSV: patches, match rate and integration latency over time (`make analysis ANALYSIS=temporal`) |
+| `temporal` | SVG figure and monthly CSV: patches, match rate and integration latency over time |
+| `sql_querier` | Interactive SQL REPL, or a one-off query, over `original` and `enriched` (non-default) |
 
-See the [Analysis Documentation](src/lkml_ground_truth/analysis/README.md) for how to add a new analysis.
+See the [Analysis Documentation](src/lkml_ground_truth/analysis/README.md) for all options and how to add a new analysis.
 
 ---
 
 ## Architecture Details
 
+### Execution Steps
+
+The main execution is split into steps, one module each in [`src/lkml_ground_truth/steps/`](src/lkml_ground_truth/steps/): `repo`, `matching` and `enrich`. Every step exposes `main(config, ...)`, and [`steps/main.py`](src/lkml_ground_truth/steps/main.py) orchestrates them like the analysis orchestrator does: no selection runs all steps in order, and a name (`--step`, or `STEP=` in Make) runs just that one. Because the steps feed each other, a failure stops the run.
+
+The same steps are available from the CLI:
+
+```bash
+uv run lkml-ground-truth --config config.toml run                  # all steps
+uv run lkml-ground-truth --config config.toml run --step matching  # one step
+uv run lkml-ground-truth --config config.toml clone-repo --force   # repo step, forcing the clone
+```
+
 ### Matching Implementation
 
-The matching pipeline is implemented in Python and works in four steps:
+The matching step is implemented in Python and works in four phases:
 
 1. **Load**: reads the `list=<name>` Parquet partitions and keeps the emails that contain a diff (`code` column).
 2. **Index**: builds (or loads from cache) a `file → [(timestamp, commit)]` index from a single `git log --name-only` pass.
@@ -371,11 +407,12 @@ score = message_diff_weight × message_similarity + (1 − message_diff_weight) 
 
 ### Enrichment Implementation
 
-`make enrich` reads the match CSVs and writes them as Parquet under `paths.enriched_root`, one `list=<name>/` partition per mailing list, keyed by `message_id`.
+The `enrich` step reads the match CSVs and writes them as Parquet under `paths.enriched_root`, one `list=<name>/` partition per mailing list, keyed by `message_id`.
 
 ### Analysis Implementation
 
-- **Polars Lazy**: fixed analyses scan the `original` and `enriched` Parquet tables without copying the datasets
+- **One module per analysis**: each exposes `build()` (a Polars LazyFrame, easy to test) and `main()`; `analysis/main.py` orchestrates them
+- **Polars Lazy**: analyses scan the `original` and `enriched` Parquet tables without copying the datasets
 - **DataFusion**: the SQL REPL registers only the `list=<name>` partitions you ask for, so one broken list never breaks queries on the others
 
 ### Vendored PaStA
@@ -389,7 +426,8 @@ score = message_diff_weight × message_similarity + (1 − message_diff_weight) 
 | Path | Purpose |
 |------|---------|
 | `src/lkml_ground_truth/` | Installable package and CLI (`lkml-ground-truth`) |
-| `src/lkml_ground_truth/analysis/` | Fixed Polars analyses and manual DataFusion SQL |
+| `src/lkml_ground_truth/steps/` | The `repo`, `matching` and `enrich` steps and their orchestrator |
+| `src/lkml_ground_truth/analysis/` | One module per analysis, the orchestrator and the DataFusion SQL REPL |
 | `src/lkml_ground_truth/pasta/` | Minimal vendored PaStA engine |
 | `scripts/` | Stand-alone export, integration and review utilities |
 | `tests/` | Automated tests |

@@ -1,93 +1,318 @@
-# Analysis
+# LKML Ground Truth Analysis
 
-This folder holds reproducible analyses over the matching results. Each
-function in `fixed.py` answers one specific question with Polars Lazy and
-writes a CSV to `output/analysis/`, a directory ignored by Git.
+Reproducible analyses over the matching results: how many patch emails were linked to a commit, how reliable those links are, and how long patches take to be integrated.
 
-It uses the same query context as the rest of the project, so it reads the
-`original` and `enriched` Parquet tables defined in `config.toml` without
-making copies of the datasets.
+## Overview
 
-## Running
+Each analysis is a small module that reads the `original` (MLH dataset) and `enriched` (matching results) Parquet tables, and writes its result to an output directory. An orchestrator runs every default analysis, or a single one by name. Data is handled with Polars lazy frames, so nothing is copied and large datasets stay manageable.
 
-After running the pipeline (`make run`, which also runs `make enrich`):
-
-```bash
-# From the repository root
-make analysis ANALYSIS=dataset_coverage LIST=all
-
-# Or directly from this folder
-make -C src/lkml_ground_truth/analysis run ANALYSIS=commit_reuse LIST=netdev
+```
+┌─────────────────┐     ┌─────────────────┐
+│    original     │     │    enriched     │
+│  (MLH dataset)  │     │ (match results) │
+└────────┬────────┘     └────────┬────────┘
+         └──────────┬────────────┘
+                    ▼
+          ┌───────────────────┐     ┌──────────────────────────┐
+          │   Orchestrator    │ ──► │ output/analysis/*.csv    │
+          │ (analysis/main.py)│     │ output/analysis/*.svg    │
+          └───────────────────┘     └──────────────────────────┘
 ```
 
-## Interactive SQL queries
+## Prerequisites
 
-`sql_querier.py` is this folder's query entry point, equivalent to the
-analysis component of MLH-Archiver. Without SQL it opens a REPL; with SQL it
-runs a single query:
+### Container Runtime (Optional)
+- Docker or Podman, used automatically when `uv` is not installed
 
-```bash
-make analysis ANALYSIS=sql_querier.py LIST=all
-make analysis ANALYSIS=sql_querier.py LIST=netdev SQL='SELECT * FROM enriched LIMIT 10'
-```
+### Native Development (Recommended)
+- Python 3.12+
+- [uv](https://docs.astral.sh/uv/) package manager
 
-It is an interface to the same query context as the rest of the project, so
-the available tables are `original` and `enriched`.
+## Installation
 
-Use `make -C src/lkml_ground_truth/analysis help` to list the analyses. To use
-another configuration file or a different destination for the CSVs:
+### Using Devbox (Recommended)
 
 ```bash
-make -C src/lkml_ground_truth/analysis run ANALYSIS=score_bands \
-  CONFIG=/path/to/config.toml RESULTS_DIR=/tmp/lkml-analysis
+devbox shell
 ```
 
-## Available fixed analyses
+This sets up Python, uv and the other dependencies automatically.
 
-| Analysis | What it reveals |
-| --- | --- |
-| `dataset_coverage` | Pipeline coverage relative to all emails: original source, patches evaluated, matches, confident matches and errors. Uses `original` and `enriched`. |
-| `match_coverage` | Coverage, confident matches, missing candidates, errors and mean score per list. |
-| `score_bands` | How many patches fall in each pipeline decision: confident, needs review, no candidate or below threshold. |
-| `match_errors` | Candidate-search errors, grouped to help diagnose systematic problems. |
-| `commit_reuse` | Commits linked to several emails; candidates for series, resends or false positives worth reviewing. |
-| `matched_pairs` | Email/commit pairs with both dates, useful for analyzing integration latency and validating individual cases. |
-
-`commit_date` is the Git *committer* date, in ISO 8601. For temporal
-analyses, it is only present in pipeline runs made after this column was
-added.
-
-## Temporal analysis (figure)
-
-`temporal.py` studies the results over time, by month of the patch email date,
-using Polars for the data and Matplotlib for the figure:
+### Manual Setup
 
 ```bash
-make analysis ANALYSIS=temporal LIST=all
-make analysis ANALYSIS=temporal LIST=netdev CONFIDENT_ONLY=1
+# Install uv if not already installed
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# From the repository root: install dependencies
+uv sync --locked --group dev
 ```
 
-It writes `output/analysis/temporal.png` and a monthly summary,
-`output/analysis/temporal.csv`. The figure has four panels:
+## Usage
+
+### Running Analyses
+
+The analyses expect the pipeline to have run (`make run`, which also runs `make enrich`).
+
+```bash
+# Using Make (runs all default analyses)
+make analysis
+
+# Run a single analysis by name
+make analysis ANALYSIS=score_bands
+make analysis ANALYSIS=temporal LIST=netdev
+make analysis ANALYSIS=temporal LIST=netdev,bpf CONFIDENT_ONLY=1
+
+# Interactive SQL
+make analysis ANALYSIS=sql_querier LIST=all
+make analysis ANALYSIS=sql_querier LIST=netdev SQL='SELECT * FROM enriched LIMIT 10'
+
+# Directly, without Make
+uv run lkml-ground-truth --config config.toml analysis --analysis temporal --list netdev
+uv run python -m lkml_ground_truth.analysis --config config.toml
+```
+
+### Input/Output Directories
+
+| Directory | Purpose |
+|-----------|---------|
+| `paths.dataset_root` | Input: MLH Parquet dataset (`list=<name>/*.parquet`), the `original` table |
+| `paths.enriched_root` | Input: matching results (`list=<name>/data.parquet`), the `enriched` table |
+| `output/analysis/` | Output: analysis results and figures (ignored by Git) |
+
+## Available Analyses
+
+### main.py
+
+Orchestrator that runs all default analyses. A failure in one analysis is logged and does not stop the others, and the process exits with an error code at the end. Supports selecting a single analysis with `ANALYSIS` (or `--analysis`); names may carry a `.py` suffix. `all` is accepted and behaves like no selection.
+
+```bash
+# Run every default analysis
+uv run lkml-ground-truth --config config.toml analysis
+
+# Run a single analysis
+uv run lkml-ground-truth --config config.toml analysis --analysis score_bands
+```
+
+### dataset_coverage.py
+
+Pipeline coverage relative to all source emails: original emails, patches evaluated, matches, confident matches and errors, per list. Uses `original` and `enriched`.
+
+### match_coverage.py
+
+Coverage, confident matches, patches without a candidate commit, errors and mean score, per list.
+
+### score_bands.py
+
+How many patches fall in each decision of the pipeline: `confident_match`, `review_match`, `no_candidate` or `below_threshold`, with score statistics.
+
+### match_errors.py
+
+Candidate-search errors, grouped to diagnose systematic problems.
+
+### commit_reuse.py
+
+Commits linked to several emails of the same list; candidates for series, resends or false positives worth reviewing.
+
+### matched_pairs.py
+
+Matched email/commit pairs with both dates, useful to analyze integration latency and to validate individual cases.
+
+### temporal.py
+
+Studies the results over time, by month of the email date. Writes `temporal.csv` (monthly summary) and `temporal.svg`, a figure with four panels:
 
 | Panel | What it shows |
-| --- | --- |
-| Patches per month | Evaluated patches vs. patches matched to a commit |
-| Match rate per month | Share of evaluated patches with a match and with a confident match |
-| Integration latency | Distribution of `commit_date - email_date`, in days, with the median |
-| Integration latency per month | Monthly median and interquartile range |
+|-------|---------------|
+| Patches per Month | Evaluated patches vs. patches matched to a commit |
+| Match Rate per Month | Share of evaluated patches with a match and with a confident match |
+| Integration Latency | Distribution of `commit_date - email_date`, in days, with the median |
+| Integration Latency per Month | Monthly median and interquartile range |
 
-`CONFIDENT_ONLY=1` restricts the latency panels to confident matches. It can
-also be run directly: `uv run python -m lkml_ground_truth.analysis.temporal --help`.
+Use `CONFIDENT_ONLY=1` to restrict the latency panels to confident matches. Recent months naturally show lower match rates and shorter latencies, because their commits may not exist yet. Latency is also bounded by `matching.days_after`, and can be slightly negative since the candidate window starts `matching.days_before` days before the email date.
 
-Reading the figure: recent months naturally show lower match rates and shorter
-latencies, because their commits may not exist yet. Latency is also bounded by
-`matching.days_after`, and can be slightly negative since the candidate window
-starts `matching.days_before` days before the email date.
+### sql_querier.py
 
-## Adding a finding
+Interactive SQL interface using [Apache DataFusion](https://datafusion.apache.org/user-guide/sql/index.html). Registers the `original` and `enriched` tables for the selected lists, shows their schemas and prompts for SQL queries. With `SQL`, it runs one query and exits. Results can be saved with `OUTPUT` (CSV, Parquet, JSON or NDJSON). This is a non-default analysis: it only runs when explicitly selected.
 
-1. Create a function in `fixed.py`, using `scan_original()` and/or `scan_enriched()`.
-2. Document the question and how to interpret the result in the table above.
-3. Add the function to `ANALYSES`, run `make analysis ANALYSIS=<name>` and keep the code in Git;
-   the resulting CSV lives in `output/analysis/`.
+```bash
+make analysis ANALYSIS=sql_querier
+make analysis ANALYSIS=sql_querier SQL='SELECT list, count(*) FROM enriched GROUP BY list' OUTPUT=output/by_list.csv
+```
+
+## Output
+
+Analysis results are stored in `output/analysis/`:
+
+```
+output/analysis/
+├── dataset_coverage.csv
+├── match_coverage.csv
+├── score_bands.csv
+├── match_errors.csv
+├── commit_reuse.csv
+├── matched_pairs.csv
+├── temporal.csv
+└── temporal.svg
+```
+
+`commit_date` is the Git *committer* date, in ISO 8601. It is only present in pipeline runs made after this column was added, so temporal analyses need a recent run.
+
+## Configuration
+
+Paths come from `config.toml` (`paths.dataset_root`, `paths.enriched_root`). Everything else is selected with Make variables or CLI options.
+
+### Make Variables
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `ANALYSIS` | *(empty)* | Run a single analysis by name instead of all default ones. Valid names: `dataset_coverage`, `match_coverage`, `score_bands`, `match_errors`, `commit_reuse`, `matched_pairs`, `temporal`, `sql_querier`†. († non-default, only runs when explicitly selected) |
+| `LIST` | `all` | Mailing list(s) to analyze: a name, a comma-separated list (`netdev,bpf`) or `all` |
+| `RESULTS_DIR` | `output/analysis` | Directory for analysis output |
+| `CONFIG` | `config.toml` | Configuration file |
+
+### Per-Analysis Variables
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `CONFIDENT_ONLY` | *(empty)* | Set to `1` to use only confident matches for latency. Used by: `temporal` |
+| `SQL` | *(empty)* | SQL to run once and exit; omit for the interactive REPL. Used by: `sql_querier` |
+| `OUTPUT` | *(empty)* | File to save the SQL result to. Used by: `sql_querier` |
+| `FORMAT` | *(inferred)* | `csv`, `parquet`, `json` or `ndjson`; inferred from `OUTPUT` when omitted. Used by: `sql_querier` |
+| `LIMIT` | `20` | Terminal row limit, `0` shows all. Used by: `sql_querier` |
+
+### CLI Options
+
+The same options are available as `uv run lkml-ground-truth --config config.toml analysis [options]`:
+
+| Option | Description |
+|--------|-------------|
+| `-a, --analysis <NAME>` | Analysis to run (default: all default analyses) |
+| `-l, --list <NAMES>` | List name, comma-separated names, or `all` (default) |
+| `-o, --output-dir <DIR>` | Output directory (default: `output/analysis`) |
+| `--confident-only` | `temporal`: confident matches only |
+| `--sql <SQL>` | `sql_querier`: query to run once |
+| `--sql-output <PATH>` | `sql_querier`: save the result |
+| `--sql-format <FMT>` | `sql_querier`: output format |
+| `--limit <N>` | `sql_querier`: terminal row limit |
+
+## Development
+
+### Running Natively
+
+For development and debugging, run the orchestrator directly from the repository root:
+
+```bash
+# Run all default analyses
+uv run python -m lkml_ground_truth.analysis --config config.toml
+
+# Run a single analysis, with a custom output directory
+uv run python -m lkml_ground_truth.analysis --config config.toml \
+  --analysis temporal --list netdev --output-dir /tmp/lkml-analysis
+```
+
+### Tests and Lint
+
+```bash
+make test
+make lint
+```
+
+## Container Build
+
+When `uv` is not installed, `make analysis` runs inside the project container (`docker` or `podman`) using the same arguments, mounting the repository and the dataset volumes. Rebuild the image with:
+
+```bash
+make rebuild
+```
+
+## Example Analysis Code
+
+Here is an example of querying the matching results with Polars:
+
+```python
+import polars as pl
+
+# Load the enriched dataset (one list=<name> partition per mailing list)
+df = pl.scan_parquet("output/enriched/list=netdev/*.parquet")
+
+# Confident matches per commit date
+per_day = (
+    df
+    .filter(pl.col("is_confident_match"))
+    .with_columns(
+        pl.col("commit_date").str.to_datetime(time_zone="UTC").dt.date().alias("day")
+    )
+    .group_by("day")
+    .agg(pl.len().alias("matches"))
+    .sort("day")
+    .collect()
+)
+```
+
+Inside the package, prefer `scan_original(config, list_name)` and `scan_enriched(config, list_name)` from `datasets.py`: they select the requested lists and normalize column types (for example, `score` to `Float64`).
+
+## Cleaning Up
+
+```bash
+# Remove build artifacts (not results)
+make clean
+
+# This removes:
+# - .venv/
+# - .ruff_cache/
+# - .nox/
+# - __pycache__/
+```
+
+## Troubleshooting
+
+### "Dataset directory does not exist" / "No Parquet files found"
+Check `paths.dataset_root` and `paths.enriched_root` in `config.toml`, and run the pipeline first:
+```bash
+make run
+```
+
+### Some analyses failed
+Each failure is logged with its traceback and the other analyses still run. Re-run the failing one on its own to debug it:
+```bash
+make analysis ANALYSIS=<name>
+```
+
+### Memory Issues
+For large datasets:
+- Use Polars lazy evaluation (`scan_parquet` instead of `read_parquet`)
+- Filter data early in the query pipeline
+- Restrict the lists with `LIST=netdev,bpf`
+
+## Extending Analyses
+
+To add a new analysis:
+
+1. Create a module in this folder with a `build(config, list_name)` function returning a `pl.LazyFrame`, and a `main(config, output_dir, list_name="all")` that saves the result (see `score_bands.py`; `common.write_csv` writes `<name>.csv`).
+2. Register it in `main.py`: add its name to `ANALYSIS_NAMES` and a lambda to `build_registry()`. Add it to `NON_DEFAULT_ANALYSES` if it should only run when selected.
+3. Add a test in `tests/` (the `analysis_config` fixture provides a small dataset).
+4. Document it in this README.
+
+Example:
+
+```python
+# src/lkml_ground_truth/analysis/my_analysis.py
+import polars as pl
+
+from ..config import Config
+from .common import write_csv
+from .datasets import scan_enriched
+
+
+def build(config: Config, list_name: str) -> pl.LazyFrame:
+    return scan_enriched(config, list_name).group_by("list").agg(pl.len().alias("patches"))
+
+
+def main(config: Config, output_dir: str, list_name: str = "all") -> None:
+    write_csv(build(config, list_name), output_dir, "my_analysis")
+```
+
+## License
+
+See the root [LICENSE](../../../LICENSE) file.

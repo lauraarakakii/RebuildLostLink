@@ -17,13 +17,17 @@ RUN := $(CONTAINER) run --rm $(USER_FLAGS)
 REPO_VOLUME ?= $(CURDIR)/resources/linux/repo
 DATASET_VOLUME ?= $(CURDIR)/resources/dataset
 
-# Set ENRICH=0 to skip the automatic 'make enrich' after 'make run'.
-ENRICH ?= 1
+# 'make run' runs every step in order (repo -> matching -> enrich).
+# Set STEP=<repo|matching|enrich> to run just one of them.
+STEP ?=
 
+# Analysis selection. Leave ANALYSIS empty to run every default analysis, or
+# name one: dataset_coverage, match_coverage, score_bands, match_errors,
+# commit_reuse, matched_pairs, temporal or sql_querier (interactive).
+# LIST accepts a name, a comma-separated list, or "all" (the default).
 LIST ?=
-ANALYSIS ?= dataset_coverage
+ANALYSIS ?=
 RESULTS_DIR ?= output/analysis
-ANALYSIS_DIR := src/lkml_ground_truth/analysis
 
 .PHONY: all
 all: run
@@ -84,7 +88,7 @@ run:
 	fi
 	@if command -v uv >/dev/null 2>&1; then \
 		echo "==> Found uv toolchain, running natively..."; \
-		uv run lkml-ground-truth --config $(CONFIG); \
+		uv run lkml-ground-truth --config $(CONFIG) run $(if $(STEP),--step $(STEP)); \
 	else \
 		echo "==> uv toolchain not found, running with $(CONTAINER) (Image: $(IMAGE))..."; \
 		$(MAKE) _ensure-image || exit 1; \
@@ -93,10 +97,7 @@ run:
 			-v $(REPO_VOLUME):/app/resources/linux/repo \
 			-v $(DATASET_VOLUME):/app/resources/dataset \
 			$(IMAGE) \
-			--config $(CONFIG); \
-	fi
-	@if [ "$(ENRICH)" != "0" ]; then \
-		$(MAKE) enrich; \
+			--config $(CONFIG) run $(if $(STEP),--step $(STEP)); \
 	fi
 
 .PHONY: test
@@ -154,37 +155,35 @@ FORMAT ?=
 LIMIT ?= 20
 CONFIDENT_ONLY ?=
 
+ANALYSIS_ARGS = \
+	$(if $(ANALYSIS),--analysis "$(ANALYSIS)") \
+	--list "$(if $(LIST),$(LIST),all)" \
+	--output-dir "$(RESULTS_DIR)" \
+	--limit "$(LIMIT)" \
+	$(if $(SQL),--sql "$(SQL)") \
+	$(if $(OUTPUT),--sql-output "$(OUTPUT)") \
+	$(if $(FORMAT),--sql-format "$(FORMAT)") \
+	$(if $(filter 1,$(CONFIDENT_ONLY)),--confident-only)
+
 .PHONY: analysis
 analysis:
-	@if [ "$(notdir $(ANALYSIS))" = "sql_querier.py" ]; then \
-		if ! command -v uv >/dev/null 2>&1; then \
-			echo "==> uv is required to run analysis queries."; \
-			exit 1; \
-		fi; \
-		uv run python -m lkml_ground_truth.analysis.sql_querier \
-			--config "$(abspath $(CONFIG))" \
-			--list "$(if $(LIST),$(LIST),all)" \
-			--limit "$(LIMIT)" \
-			$(if $(SQL),"$(SQL)") \
-			$(if $(OUTPUT),--output "$(OUTPUT)") \
-			$(if $(FORMAT),--format "$(FORMAT)"); \
-	elif [ "$(basename $(notdir $(ANALYSIS)))" = "temporal" ]; then \
-		if ! command -v uv >/dev/null 2>&1; then \
-			echo "==> uv is required to run the temporal analysis."; \
-			exit 1; \
-		fi; \
-		uv run python -m lkml_ground_truth.analysis.temporal \
-			--config "$(abspath $(CONFIG))" \
-			--list "$(if $(LIST),$(LIST),all)" \
-			--output "$(abspath $(RESULTS_DIR))/temporal.png" \
-			$(if $(filter 1,$(CONFIDENT_ONLY)),--confident-only); \
+	@if [ ! -f "$(CONFIG)" ]; then \
+		echo "==> Error: $(CONFIG) não encontrado. Rode 'make config' primeiro."; \
+		exit 1; \
+	fi
+	@if command -v uv >/dev/null 2>&1; then \
+		echo "==> Found uv toolchain, running natively..."; \
+		uv run lkml-ground-truth --config $(CONFIG) analysis $(ANALYSIS_ARGS); \
 	else \
-		$(MAKE) -C "$(ANALYSIS_DIR)" run \
-			REPO_ROOT="$(CURDIR)" \
-			CONFIG="$(abspath $(CONFIG))" \
-			ANALYSIS="$(ANALYSIS)" \
-			LIST="$(if $(LIST),$(LIST),all)" \
-			RESULTS_DIR="$(abspath $(RESULTS_DIR))"; \
+		echo "==> uv toolchain not found, running with $(CONTAINER) (Image: $(IMAGE))..."; \
+		$(MAKE) _ensure-image || exit 1; \
+		$(RUN) -it \
+			-e MPLCONFIGDIR=/tmp \
+			-v $(CURDIR):/app \
+			-v $(REPO_VOLUME):/app/resources/linux/repo \
+			-v $(DATASET_VOLUME):/app/resources/dataset \
+			$(IMAGE) \
+			--config $(CONFIG) analysis $(ANALYSIS_ARGS); \
 	fi
 
 .PHONY: clean

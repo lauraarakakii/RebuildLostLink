@@ -1,45 +1,42 @@
-"""Temporal analysis of the matching results, with a Matplotlib figure.
+"""Temporal analysis of the matching results: volume, match rate and latency.
 
-Two questions are answered, both over time (by month of the patch email date):
+Patches are grouped by the month of the email date. Two questions are answered:
 
 * How many patches were evaluated and matched to a commit, and at what rate?
 * How long does a patch take to be integrated (``commit_date - email_date``)?
 
-The data wrangling is done with Polars LazyFrames over the ``original`` and
-``enriched`` datasets; Matplotlib is only used to draw the figure.
-
-Usage (from the repository root)::
-
-    make analysis ANALYSIS=temporal LIST=all
-    uv run python -m lkml_ground_truth.analysis.temporal --config config.toml --list netdev
+Data wrangling uses Polars LazyFrames over the ``original`` and ``enriched``
+datasets; seaborn/Matplotlib only draw the figure. Outputs, in ``output_dir``:
+``temporal.svg`` (figure) and ``temporal.csv`` (monthly summary).
 """
 
 from __future__ import annotations
 
-import argparse
+import logging
 from pathlib import Path
 
 import polars as pl
 
-from ..config import Config, load_config
+from ..config import Config
+from .common import ensure_output_dir, write_csv
 from .datasets import scan_enriched, scan_original
 
-DEFAULT_OUTPUT = "output/analysis/temporal.png"
+logger = logging.getLogger(__name__)
 
 
 def evaluated_patches(config: Config, list_name: str) -> pl.LazyFrame:
     """Every evaluated patch with its email date and (UTC) commit date.
 
-    ``score`` is stored as text in the enriched dataset and ``commit_date`` as
-    an ISO 8601 string with a UTC offset, so both are normalized here. Dates are
-    naive UTC datetimes so they can be subtracted. ``latency_days`` is only set
-    for rows that have a commit date; it can be slightly negative because the
-    matching window starts ``days_before`` days before the email date.
+    ``commit_date`` is stored as an ISO 8601 string with a UTC offset. Both
+    dates become naive UTC datetimes so they can be subtracted.
+    ``latency_days`` is only set for rows with a commit date, and can be
+    slightly negative because the matching window starts ``days_before`` days
+    before the email date.
     """
     enriched = scan_enriched(config, list_name).select(
         "list",
         "message_id",
-        pl.col("score").cast(pl.Float64, strict=False),
+        "score",
         pl.col("is_match").fill_null(False),
         pl.col("is_confident_match").fill_null(False),
         pl.col("commit_date")
@@ -70,9 +67,7 @@ def matched_latency(
     )
 
 
-def monthly_activity(
-    config: Config, list_name: str, confident_only: bool = False
-) -> pl.LazyFrame:
+def build(config: Config, list_name: str, confident_only: bool = False) -> pl.LazyFrame:
     """One row per month of email date: volumes, match rates and latency quartiles."""
     flag = "is_confident_match" if confident_only else "is_match"
     return (
@@ -97,62 +92,75 @@ def monthly_activity(
     )
 
 
-def plot_temporal(
+def plot(
     monthly: pl.DataFrame,
     latency: pl.Series,
     output: Path,
     title: str,
     confident_only: bool = False,
-    dpi: int = 150,
 ) -> None:
-    """Draw the 2x2 figure and save it to ``output``."""
+    """Draw the 2x2 figure and save it to ``output`` (format from the suffix)."""
     import matplotlib
 
     matplotlib.use("Agg")  # Headless: write files only.
     import matplotlib.dates as mdates
     import matplotlib.pyplot as plt
+    import seaborn as sns
+
+    sns.set_style("whitegrid")
 
     months = monthly["month"].to_list()
     kind = "confident matches" if confident_only else "matches"
+    matched_col = "confident_matches" if confident_only else "matches"
+    palette = sns.color_palette("deep")
 
     fig, axes = plt.subplots(2, 2, figsize=(14, 9), constrained_layout=True)
     (ax_vol, ax_rate), (ax_hist, ax_lat) = axes
 
     # (1) Monthly volume: evaluated patches vs. matched patches.
-    ax_vol.bar(months, monthly["evaluated_patches"], width=25, color="#c7d3e3", label="Evaluated")
     ax_vol.bar(
         months,
-        monthly["confident_matches" if confident_only else "matches"],
+        monthly["evaluated_patches"].to_list(),
         width=25,
-        color="#2b6cb0",
-        label=kind.capitalize(),
+        color=palette[0],
+        alpha=0.35,
+        label=f"Evaluated (n={monthly['evaluated_patches'].sum()})",
     )
-    ax_vol.set_title("Patches per month (by email date)")
+    ax_vol.bar(
+        months,
+        monthly[matched_col].to_list(),
+        width=25,
+        color=palette[0],
+        label=f"{kind.capitalize()} (n={monthly[matched_col].sum()})",
+    )
+    ax_vol.set_title("Patches per Month (by Email Date)")
     ax_vol.set_ylabel("Patches")
-    ax_vol.legend(frameon=False)
+    ax_vol.legend()
 
     # (2) Monthly match rate.
-    ax_rate.plot(months, monthly["match_rate"] * 100, color="#2b6cb0", label="Matches")
-    ax_rate.plot(
-        months,
-        monthly["confident_match_rate"] * 100,
-        color="#dd6b20",
+    sns.lineplot(
+        x=months, y=(monthly["match_rate"] * 100).to_list(), ax=ax_rate, label="Matches"
+    )
+    sns.lineplot(
+        x=months,
+        y=(monthly["confident_match_rate"] * 100).to_list(),
+        ax=ax_rate,
         label="Confident matches",
     )
-    ax_rate.set_title("Match rate per month")
+    ax_rate.set_title("Match Rate per Month")
     ax_rate.set_ylabel("% of evaluated patches")
     ax_rate.set_ylim(0, 100)
-    ax_rate.legend(frameon=False)
 
     # (3) Distribution of integration latency (clipped at the 99th percentile).
     if latency.len() > 0:
         upper = latency.quantile(0.99)
-        shown = latency.filter(latency <= upper)
         median = latency.median()
-        ax_hist.hist(shown.to_numpy(), bins=60, color="#2b6cb0")
-        ax_hist.axvline(median, color="#dd6b20", linestyle="--", label=f"Median: {median:.1f} d")
-        ax_hist.legend(frameon=False)
-    ax_hist.set_title(f"Integration latency ({kind}; up to the 99th percentile)")
+        sns.histplot(latency.filter(latency <= upper).to_numpy(), bins=60, ax=ax_hist)
+        ax_hist.axvline(
+            median, color=palette[1], linestyle="--", label=f"Median: {median:.1f} days"
+        )
+        ax_hist.legend()
+    ax_hist.set_title(f"Integration Latency ({kind}, n={latency.len()}; up to P99)")
     ax_hist.set_xlabel("Days from email to commit")
     ax_hist.set_ylabel("Patches")
 
@@ -161,21 +169,20 @@ def plot_temporal(
     lat_months = lat["month"].to_list()
     ax_lat.fill_between(
         lat_months,
-        lat["latency_p25"],
-        lat["latency_p75"],
-        color="#c7d3e3",
+        lat["latency_p25"].to_list(),
+        lat["latency_p75"].to_list(),
+        color=palette[0],
+        alpha=0.25,
         label="Interquartile range",
     )
-    ax_lat.plot(lat_months, lat["latency_median"], color="#2b6cb0", label="Median")
-    ax_lat.set_title("Integration latency per month")
+    sns.lineplot(x=lat_months, y=lat["latency_median"].to_list(), ax=ax_lat, label="Median")
+    ax_lat.set_title("Integration Latency per Month")
     ax_lat.set_ylabel("Days from email to commit")
     ax_lat.legend(loc="upper right", frameon=True, facecolor="white", framealpha=0.95)
 
     for ax in (ax_vol, ax_rate, ax_lat):
         ax.xaxis.set_major_locator(mdates.AutoDateLocator())
         ax.xaxis.set_major_formatter(mdates.ConciseDateFormatter(ax.xaxis.get_major_locator()))
-    for ax in axes.flat:
-        ax.spines[["top", "right"]].set_visible(False)
 
     fig.suptitle(title, fontsize=14)
     fig.text(
@@ -187,62 +194,35 @@ def plot_temporal(
         fontsize=8,
         color="#555555",
     )
-    output.parent.mkdir(parents=True, exist_ok=True)
-    fig.savefig(output, dpi=dpi, bbox_inches="tight")
+    ensure_output_dir(output.parent)
+    fig.savefig(output, bbox_inches="tight")
     plt.close(fig)
 
 
-def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(
-        description="Temporal analysis of matching results: volume, match rate and latency."
-    )
-    parser.add_argument("--config", required=True, help="Path to config.toml.")
-    parser.add_argument("--list", dest="list_name", default="all", help="List name, or 'all'.")
-    parser.add_argument("--output", default=DEFAULT_OUTPUT, help="PNG path for the figure.")
-    parser.add_argument(
-        "--csv",
-        default=None,
-        help="Monthly summary CSV path (default: next to the figure, with .csv).",
-    )
-    parser.add_argument(
-        "--confident-only",
-        action="store_true",
-        help="Use only confident matches (score >= matching.autoaccept) for latency.",
-    )
-    parser.add_argument("--dpi", type=int, default=150)
-    return parser
-
-
-def main(argv: list[str] | None = None) -> None:
-    args = build_parser().parse_args(argv)
-    config = load_config(args.config)
-
-    monthly = monthly_activity(config, args.list_name, args.confident_only).collect()
+def main(
+    config: Config,
+    output_dir: str,
+    list_name: str = "all",
+    confident_only: bool = False,
+) -> None:
+    monthly = build(config, list_name, confident_only).collect()
     if monthly.is_empty():
-        raise SystemExit("No evaluated patches with an email date were found.")
+        logger.warning("No evaluated patches with an email date were found; nothing to plot.")
+        return
     latency = (
-        matched_latency(config, args.list_name, args.confident_only)
+        matched_latency(config, list_name, confident_only)
         .select("latency_days")
         .collect()
         .to_series()
     )
 
-    output = Path(args.output)
-    csv_path = Path(args.csv) if args.csv else output.with_suffix(".csv")
-    csv_path.parent.mkdir(parents=True, exist_ok=True)
-    monthly.write_csv(csv_path)
-
-    plot_temporal(
+    write_csv(monthly, output_dir, "temporal")
+    figure = Path(output_dir) / "temporal.svg"
+    plot(
         monthly,
         latency,
-        output,
-        title=f"Temporal analysis - list: {args.list_name}",
-        confident_only=args.confident_only,
-        dpi=args.dpi,
+        figure,
+        title=f"Temporal Analysis - list: {list_name}",
+        confident_only=confident_only,
     )
-    print(f"Saved figure to {output}")
-    print(f"Saved {monthly.height} monthly row(s) to {csv_path}")
-
-
-if __name__ == "__main__":
-    main()
+    logger.info("Saved figure to %s", figure)

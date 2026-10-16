@@ -16,6 +16,7 @@ dependencies = [
     "dateparser~=1.2",
     "datafusion~=54.0.0",
     "matplotlib~=3.10",
+    "seaborn~=0.13.2",
 ]
 
 [dependency-groups]

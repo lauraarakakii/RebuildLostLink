@@ -1,47 +1,30 @@
+"""Interactive SQL over the ``original`` and ``enriched`` Parquet tables.
+
+Powered by Apache DataFusion (see :mod:`lkml_ground_truth.analysis.query`).
+Without SQL it opens a REPL that lists the available tables and schemas, then
+prompts for queries; with ``sql`` it runs a single query and exits. This is a
+non-default analysis: it only runs when explicitly selected.
+"""
+
 from __future__ import annotations
 
-import argparse
-from pathlib import Path
-
-from ..config import load_config
+from ..config import Config
 from .query import run
 
 
-def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(
-        description="Query the LKML Ground Truth original and enriched datasets."
-    )
-    parser.add_argument(
-        "-c",
-        "--config",
-        default=str(Path(__file__).resolve().parents[3] / "config.toml"),
-        help="Path to config.toml (default: the repository config.toml).",
-    )
-    parser.add_argument("sql", nargs="?", help="SQL to execute; omit for the interactive REPL.")
-    parser.add_argument("-l", "--list", dest="list_name", help="List name, or 'all'.")
-    parser.add_argument("--output", help="Optional result path (CSV, Parquet, JSON, or NDJSON).")
-    parser.add_argument(
-        "-f",
-        "--format",
-        dest="fmt",
-        choices=("csv", "parquet", "json", "ndjson"),
-        help="Output format; inferred from --output when omitted.",
-    )
-    parser.add_argument("--limit", type=int, default=20, help="Terminal row limit; 0 shows all.")
-    return parser
+def main(
+    config: Config,
+    output_dir: str,
+    list_name: str = "all",
+    sql: str | None = None,
+    output: str | None = None,
+    fmt: str | None = None,
+    limit: int = 20,
+) -> None:
+    """Run one SQL query (``sql``) or open the REPL (``sql`` omitted).
 
-
-def main() -> None:
-    args = build_parser().parse_args()
-    run(
-        load_config(args.config),
-        args.sql,
-        list_name=args.list_name,
-        output=args.output,
-        fmt=args.fmt,
-        limit=args.limit,
-    )
-
-
-if __name__ == "__main__":
-    main()
+    ``output_dir`` is accepted for the common analysis signature; results are
+    only saved when ``output`` is given (format inferred from its extension, or
+    ``fmt``).
+    """
+    run(config, sql, list_name=list_name, output=output, fmt=fmt, limit=limit)

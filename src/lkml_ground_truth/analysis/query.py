@@ -95,8 +95,9 @@ def _available_enriched_lists(config: Config) -> list[str]:
 
 def _resolve_lists(config: Config, list_name: str | None) -> list[str]:
     name = list_name or config.paths.list_name
-    if name.lower() not in _ALL_ALIASES:
-        return [name]
+    requested = [part.strip() for part in name.split(",") if part.strip()]
+    if requested and not any(part.lower() in _ALL_ALIASES for part in requested):
+        return requested
 
     try:
         originals = config.paths.available_lists()
@@ -383,7 +384,7 @@ def run_repl(
             if query is None:
                 continue
             if query.rstrip(";").strip().lower() in _EXIT_COMMANDS:
-                print("Saindo.")
+                print("Leaving.")
                 break
 
             start = time.perf_counter()

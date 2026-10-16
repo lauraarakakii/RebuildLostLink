@@ -8,12 +8,27 @@ import polars as pl
 
 from ..config import Config
 
+ALL_LISTS = frozenset({"all", "*"})
+
+
+def parse_list_names(list_name: str | None) -> list[str]:
+    """Split a comma-separated list selection (``"netdev,bpf"``) into names.
+
+    An empty selection yields ``[]``; callers treat that, like ``all``, as
+    "every available list".
+    """
+    return [name.strip() for name in (list_name or "").split(",") if name.strip()]
+
 
 def _resolve_lists(root: Path, list_name: str) -> list[str]:
-    if list_name.lower() not in {"all", "*"}:
-        return [list_name]
+    names = parse_list_names(list_name)
+    if names and not any(name.lower() in ALL_LISTS for name in names):
+        return names
     if not root.is_dir():
-        raise FileNotFoundError(f"Dataset directory does not exist: {root}")
+        raise FileNotFoundError(
+            f"Dataset directory does not exist: {root}. "
+            "Check paths in config.toml and run the pipeline first ('make run')."
+        )
     return sorted(
         path.name.removeprefix("list=")
         for path in root.iterdir()
@@ -40,7 +55,8 @@ def scan_partitioned_dataset(root: str, list_name: str) -> pl.LazyFrame:
         )
     if not scans:
         raise FileNotFoundError(
-            f"No Parquet files found in {dataset_root} for list(s): {list_name}."
+            f"No Parquet files found in {dataset_root} for list(s): {list_name}. "
+            "Check paths in config.toml and run the pipeline first ('make run')."
         )
     return pl.concat(scans, how="diagonal_relaxed")
 
@@ -51,5 +67,11 @@ def scan_original(config: Config, list_name: str) -> pl.LazyFrame:
 
 
 def scan_enriched(config: Config, list_name: str) -> pl.LazyFrame:
-    """Scan matching results enriched with the list partition name."""
-    return scan_partitioned_dataset(config.paths.enriched_root, list_name)
+    """Scan matching results enriched with the list partition name.
+
+    ``score`` is normalized to ``Float64``: some enriched runs persisted it as
+    text, which would break ``mean``/``min``/``max`` in the analyses.
+    """
+    return scan_partitioned_dataset(config.paths.enriched_root, list_name).with_columns(
+        pl.col("score").cast(pl.Float64, strict=False)
+    )

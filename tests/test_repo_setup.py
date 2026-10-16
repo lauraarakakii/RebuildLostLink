@@ -2,8 +2,8 @@ import subprocess
 
 import pytest
 
-from lkml_ground_truth.config import RepoConfig
-from lkml_ground_truth.repo_setup import ensure_repo
+from rebuild_lost_link.config import RepoConfig
+from rebuild_lost_link.repo_setup import ensure_repo
 
 
 def _init_real_git_repo(path):

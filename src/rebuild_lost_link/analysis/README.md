@@ -1,4 +1,4 @@
-# LKML Ground Truth Analysis
+# RebuildLostLink Analysis
 
 Reproducible analyses over the matching results: how many patch emails were linked to a commit, how reliable those links are, and how long patches take to be integrated.
 
@@ -68,8 +68,8 @@ make analysis ANALYSIS=sql_querier LIST=all
 make analysis ANALYSIS=sql_querier LIST=netdev SQL='SELECT * FROM enriched LIMIT 10'
 
 # Directly, without Make
-uv run lkml-ground-truth --config config.toml analysis --analysis latency_per_month --list netdev
-uv run python -m lkml_ground_truth.analysis --config config.toml
+uv run rebuild-lost-link --config config.toml analysis --analysis latency_per_month --list netdev
+uv run python -m rebuild_lost_link.analysis --config config.toml
 ```
 
 ### Input/Output Directories
@@ -88,10 +88,10 @@ Orchestrator that runs all default analyses. A failure in one analysis is logged
 
 ```bash
 # Run every default analysis
-uv run lkml-ground-truth --config config.toml analysis
+uv run rebuild-lost-link --config config.toml analysis
 
 # Run a single analysis
-uv run lkml-ground-truth --config config.toml analysis --analysis score_bands
+uv run rebuild-lost-link --config config.toml analysis --analysis score_bands
 ```
 
 ### dataset_coverage.py
@@ -203,7 +203,7 @@ Paths come from `config.toml` (`paths.dataset_root`, `paths.enriched_root`). Eve
 
 ### CLI Options
 
-The same options are available as `uv run lkml-ground-truth --config config.toml analysis [options]`:
+The same options are available as `uv run rebuild-lost-link --config config.toml analysis [options]`:
 
 | Option | Description |
 |--------|-------------|
@@ -224,10 +224,10 @@ For development and debugging, run the orchestrator directly from the repository
 
 ```bash
 # Run all default analyses
-uv run python -m lkml_ground_truth.analysis --config config.toml
+uv run python -m rebuild_lost_link.analysis --config config.toml
 
 # Run a single analysis, with a custom output directory
-uv run python -m lkml_ground_truth.analysis --config config.toml \
+uv run python -m rebuild_lost_link.analysis --config config.toml \
   --analysis latency_per_month --list netdev --output-dir /tmp/lkml-analysis
 ```
 
@@ -317,7 +317,7 @@ To add a new analysis:
 Example:
 
 ```python
-# src/lkml_ground_truth/analysis/my_analysis.py
+# src/rebuild_lost_link/analysis/my_analysis.py
 import polars as pl
 
 from ..config import Config

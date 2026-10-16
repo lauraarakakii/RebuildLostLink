@@ -1,4 +1,4 @@
-"""Orchestrator for the main execution (``lkml-ground-truth run``).
+"""Orchestrator for the main execution (``rebuild-lost-link run``).
 
 Mirrors the analysis orchestrator: every stage lives in its own module and
 exposes ``main(config, ...)``. Without a selection all stages run in order

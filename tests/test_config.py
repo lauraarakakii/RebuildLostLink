@@ -1,6 +1,6 @@
 import pytest
 
-from lkml_ground_truth.config import load_config
+from rebuild_lost_link.config import load_config
 
 
 def _write_config(tmp_path, repo_section=""):

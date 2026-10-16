@@ -1,6 +1,6 @@
 """Interactive SQL over the ``original`` and ``enriched`` Parquet tables.
 
-Powered by Apache DataFusion (see :mod:`lkml_ground_truth.analysis.query`).
+Powered by Apache DataFusion (see :mod:`rebuild_lost_link.analysis.query`).
 Without SQL it opens a REPL that lists the available tables and schemas, then
 prompts for queries; with ``sql`` it runs a single query and exits. This is a
 non-default analysis: it only runs when explicitly selected.

@@ -1,4 +1,4 @@
-from lkml_ground_truth.commit_index import _parse_git_log_dump, find_candidates
+from rebuild_lost_link.commit_index import _parse_git_log_dump, find_candidates
 
 GIT_LOG_DUMP = (
     "\x01aaaa111 1000\n"

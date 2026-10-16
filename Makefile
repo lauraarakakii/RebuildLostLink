@@ -1,7 +1,7 @@
 CONFIG ?= config.toml
 
 CONTAINER := $(shell command -v docker 2>/dev/null || command -v podman 2>/dev/null)
-IMAGE := lkml-ground-truth
+IMAGE := rebuild-lost-link
 
 # Run containers as the invoking user, never as root.
 # Rootless Podman uses keep-id; Docker uses --user.
@@ -69,7 +69,7 @@ repo:
 	echo "    se preferir: nohup make repo &)..."; \
 	if command -v uv >/dev/null 2>&1; then \
 		echo "==> Found uv toolchain, running natively..."; \
-		uv run lkml-ground-truth --config $(CONFIG) clone-repo --force; \
+		uv run rebuild-lost-link --config $(CONFIG) clone-repo --force; \
 	else \
 		echo "==> uv toolchain not found, running with $(CONTAINER) (Image: $(IMAGE))..."; \
 		$(MAKE) _ensure-image || exit 1; \
@@ -89,7 +89,7 @@ run:
 	fi
 	@if command -v uv >/dev/null 2>&1; then \
 		echo "==> Found uv toolchain, running natively..."; \
-		uv run lkml-ground-truth --config $(CONFIG) run $(if $(STEP),--step $(STEP)); \
+		uv run rebuild-lost-link --config $(CONFIG) run $(if $(STEP),--step $(STEP)); \
 	else \
 		echo "==> uv toolchain not found, running with $(CONTAINER) (Image: $(IMAGE))..."; \
 		$(MAKE) _ensure-image || exit 1; \
@@ -140,7 +140,7 @@ enrich:
 	fi
 	@if command -v uv >/dev/null 2>&1; then \
 		echo "==> Found uv toolchain, running natively..."; \
-		uv run lkml-ground-truth --config $(CONFIG) enrich; \
+		uv run rebuild-lost-link --config $(CONFIG) enrich; \
 	else \
 		echo "==> uv toolchain not found, running with $(CONTAINER) (Image: $(IMAGE))..."; \
 		$(MAKE) _ensure-image || exit 1; \
@@ -174,7 +174,7 @@ analysis:
 	fi
 	@if command -v uv >/dev/null 2>&1; then \
 		echo "==> Found uv toolchain, running natively..."; \
-		uv run lkml-ground-truth --config $(CONFIG) analysis $(ANALYSIS_ARGS); \
+		uv run rebuild-lost-link --config $(CONFIG) analysis $(ANALYSIS_ARGS); \
 	else \
 		echo "==> uv toolchain not found, running with $(CONTAINER) (Image: $(IMAGE))..."; \
 		$(MAKE) _ensure-image || exit 1; \

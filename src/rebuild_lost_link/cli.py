@@ -1,4 +1,4 @@
-"""Command-line entry point (``lkml-ground-truth`` / ``python -m lkml_ground_truth``)."""
+"""Command-line entry point (``rebuild-lost-link`` / ``python -m rebuild_lost_link``)."""
 
 from __future__ import annotations
 
@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 
 def build_arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        prog="lkml-ground-truth",
+        prog="rebuild-lost-link",
         description=(
             "Match patch emails from a MailingListsHeritage dataset with "
             "commits in the Linux Git repository using PaStA's comparison engine."

@@ -5,7 +5,7 @@ from datetime import datetime
 import polars as pl
 import pytest
 
-from lkml_ground_truth.config import load_config
+from rebuild_lost_link.config import load_config
 
 
 @pytest.fixture

@@ -1,7 +1,7 @@
 import pytest
 
-from lkml_ground_truth.analysis import main as analysis_main
-from lkml_ground_truth.analysis.main import ANALYSIS_NAMES, RunOptions, build_registry, run_analyses
+from rebuild_lost_link.analysis import main as analysis_main
+from rebuild_lost_link.analysis.main import ANALYSIS_NAMES, RunOptions, build_registry, run_analyses
 
 
 def _registry(calls, failing=()):

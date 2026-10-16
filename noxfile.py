@@ -17,7 +17,7 @@ def tests(session: nox.Session) -> None:
     session.install("pytest", "pytest-cov")
     session.run(
         "pytest",
-        "--cov=lkml_ground_truth",
+        "--cov=rebuild_lost_link",
         "--cov-report=term-missing",
         "--cov-report=html",
         *session.posargs,

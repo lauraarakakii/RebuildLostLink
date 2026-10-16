@@ -1,7 +1,7 @@
 """Pipeline orchestration from one or more datasets to match CSV files.
 
 This module handles I/O and ``multiprocessing.Pool``. Patch-to-commit
-comparison lives in :mod:`lkml_ground_truth.engine`.
+comparison lives in :mod:`rebuild_lost_link.engine`.
 """
 
 from __future__ import annotations

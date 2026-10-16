@@ -4,11 +4,11 @@ repos:
     hooks:
       - id: trailing-whitespace
         args: [--markdown-linebreak-ext=md]
-        exclude: ^src/lkml_ground_truth/pasta/
+        exclude: ^src/rebuild_lost_link/pasta/
       - id: check-added-large-files
         args: [--maxkb=512]
       - id: end-of-file-fixer
-        exclude: ^src/lkml_ground_truth/pasta/
+        exclude: ^src/rebuild_lost_link/pasta/
       - id: mixed-line-ending
       - id: check-json
       - id: check-toml

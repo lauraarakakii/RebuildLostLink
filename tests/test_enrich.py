@@ -1,7 +1,7 @@
 import polars as pl
 from pathlib import Path
-from lkml_ground_truth.config import Config, Matching, Paths, Performance, RepoConfig
-from lkml_ground_truth.enrich import enrich_list
+from rebuild_lost_link.config import Config, Matching, Paths, Performance, RepoConfig
+from rebuild_lost_link.enrich import enrich_list
 
 def _config(tmp_path):
     return Config(
@@ -130,4 +130,4 @@ O parser do MailinglistsHeritage grava "" quando falta o header Message-ID, sem 
     assert out.height == 2
     assert out.get_column("best_commit").null_count() == 2
 
-    
+

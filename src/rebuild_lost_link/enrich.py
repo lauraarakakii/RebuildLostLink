@@ -25,7 +25,7 @@ def enrich_list(config: Config, list_name: str) -> None:
     if not matches_path.exists(): 
         raise FileNotFoundError( 
             f"Match CSV was not found for list '{list_name}': {matches_path}. "
-            "Run the pipeline first ('lkml-ground-truth run')."
+            "Run the pipeline first ('rebuild-lost-link run')."
         )
 
     # logger.info("Lendo dataset original: %s", glob_path)

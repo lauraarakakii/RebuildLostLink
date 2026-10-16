@@ -3,7 +3,7 @@
 import polars as pl
 import pytest
 
-from lkml_ground_truth.analysis import (
+from rebuild_lost_link.analysis import (
     integration_cdf,
     latency_distribution,
     latency_per_month,

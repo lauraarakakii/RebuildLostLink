@@ -2,7 +2,7 @@ from datetime import datetime
 
 import pytest
 
-from lkml_ground_truth.analysis import temporal_data
+from rebuild_lost_link.analysis import temporal_data
 
 
 def test_matched_latency_in_days(analysis_config):

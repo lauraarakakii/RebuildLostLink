@@ -42,4 +42,4 @@ ENV PATH="/opt/venv/bin:$PATH" \
 # Default não-root; sobrescrito por --user em runtime
 USER 1000:1000
 
-ENTRYPOINT ["lkml-ground-truth"]
+ENTRYPOINT ["rebuild-lost-link"]

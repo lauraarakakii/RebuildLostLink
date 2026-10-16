@@ -1,7 +1,7 @@
 from datetime import UTC, datetime
 from types import SimpleNamespace
 
-import lkml_ground_truth.engine as engine
+import rebuild_lost_link.engine as engine
 
 
 def test_process_row_includes_selected_commit_committer_date(monkeypatch):

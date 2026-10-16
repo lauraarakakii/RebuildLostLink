@@ -1,4 +1,4 @@
-# LKML Ground Truth - Link Linux Kernel Patch Emails to Their Commits
+# RebuildLostLink - Reconstruct Links Between Linux Kernel Patch Emails and Commits
 
 Match patch emails from a [MailingListsHeritage](https://gitlab.com/ccsl-usp/codev/MailingListsHeritage) (MLH) Parquet dataset to the commits that integrate them into a Linux Git repository, producing a ground truth of "which email became which commit".
 
@@ -25,14 +25,14 @@ This project consists of four main components:
 
 | Component | Description | Language |
 |-----------|-------------|----------|
-| **[Matching Pipeline](src/lkml_ground_truth/)** | Compares each patch email with candidate commits and writes one CSV of matches per mailing list | Python |
-| **[Enrichment](src/lkml_ground_truth/enrich.py)** | Persists the match results as Parquet partitioned by mailing list | Python |
-| **[Analysis](src/lkml_ground_truth/analysis/)** | One module per analysis (Polars reports, integration-time charts and an interactive DataFusion SQL REPL), run by a single orchestrator | Python |
+| **[Matching Pipeline](src/rebuild_lost_link/)** | Compares each patch email with candidate commits and writes one CSV of matches per mailing list | Python |
+| **[Enrichment](src/rebuild_lost_link/enrich.py)** | Persists the match results as Parquet partitioned by mailing list | Python |
+| **[Analysis](src/rebuild_lost_link/analysis/)** | One module per analysis (Polars reports, integration-time charts and an interactive DataFusion SQL REPL), run by a single orchestrator | Python |
 | **[Extra Scripts](scripts/)** | Stand-alone export, integration and manual review utilities | Python |
 
 Each component has its own detailed documentation:
 
-- [Analysis Documentation](src/lkml_ground_truth/analysis/README.md)
+- [Analysis Documentation](src/rebuild_lost_link/analysis/README.md)
 - [Scripts Documentation](scripts/README.md)
 
 ## Outputs
@@ -337,7 +337,7 @@ Open `http://localhost:8000`. Each answer is saved immediately to an append-only
 
 ## Analysis
 
-Reproducible analyses over the matching results live in [`src/lkml_ground_truth/analysis/`](src/lkml_ground_truth/analysis/). Run them after `make run` (which already runs `make enrich`):
+Reproducible analyses over the matching results live in [`src/rebuild_lost_link/analysis/`](src/rebuild_lost_link/analysis/). Run them after `make run` (which already runs `make enrich`):
 
 ```bash
 # Every default analysis, results in output/analysis/
@@ -370,7 +370,7 @@ An analysis that fails is logged and does not stop the others. `sql_querier` is 
 | `latency_per_month` | One chart (SVG + CSV): monthly median latency with the interquartile range |
 | `sql_querier` | Interactive SQL REPL, or a one-off query, over `original` and `enriched` (non-default) |
 
-See the [Analysis Documentation](src/lkml_ground_truth/analysis/README.md) for all options and how to add a new analysis.
+See the [Analysis Documentation](src/rebuild_lost_link/analysis/README.md) for all options and how to add a new analysis.
 
 ---
 
@@ -378,14 +378,14 @@ See the [Analysis Documentation](src/lkml_ground_truth/analysis/README.md) for a
 
 ### Execution Steps
 
-The main execution is split into steps, one module each in [`src/lkml_ground_truth/steps/`](src/lkml_ground_truth/steps/): `repo`, `matching` and `enrich`. Every step exposes `main(config, ...)`, and [`steps/main.py`](src/lkml_ground_truth/steps/main.py) orchestrates them like the analysis orchestrator does: no selection runs all steps in order, and a name (`--step`, or `STEP=` in Make) runs just that one. Because the steps feed each other, a failure stops the run.
+The main execution is split into steps, one module each in [`src/rebuild_lost_link/steps/`](src/rebuild_lost_link/steps/): `repo`, `matching` and `enrich`. Every step exposes `main(config, ...)`, and [`steps/main.py`](src/rebuild_lost_link/steps/main.py) orchestrates them like the analysis orchestrator does: no selection runs all steps in order, and a name (`--step`, or `STEP=` in Make) runs just that one. Because the steps feed each other, a failure stops the run.
 
 The same steps are available from the CLI:
 
 ```bash
-uv run lkml-ground-truth --config config.toml run                  # all steps
-uv run lkml-ground-truth --config config.toml run --step matching  # one step
-uv run lkml-ground-truth --config config.toml clone-repo --force   # repo step, forcing the clone
+uv run rebuild-lost-link --config config.toml run                  # all steps
+uv run rebuild-lost-link --config config.toml run --step matching  # one step
+uv run rebuild-lost-link --config config.toml clone-repo --force   # repo step, forcing the clone
 ```
 
 ### Matching Implementation
@@ -420,7 +420,7 @@ The `enrich` step reads the match CSVs and writes them as Parquet under `paths.e
 
 ### Vendored PaStA
 
-[`src/lkml_ground_truth/pasta/`](src/lkml_ground_truth/pasta/) is a minimal copy of the [PaStA](https://github.com/lfd/PaStA) patch comparison engine. It retains its upstream copyright and GPLv2 notices and is excluded from linting to preserve the original style.
+[`src/rebuild_lost_link/pasta/`](src/rebuild_lost_link/pasta/) is a minimal copy of the [PaStA](https://github.com/lfd/PaStA) patch comparison engine. It retains its upstream copyright and GPLv2 notices and is excluded from linting to preserve the original style.
 
 ---
 
@@ -428,10 +428,10 @@ The `enrich` step reads the match CSVs and writes them as Parquet under `paths.e
 
 | Path | Purpose |
 |------|---------|
-| `src/lkml_ground_truth/` | Installable package and CLI (`lkml-ground-truth`) |
-| `src/lkml_ground_truth/steps/` | The `repo`, `matching` and `enrich` steps and their orchestrator |
-| `src/lkml_ground_truth/analysis/` | One module per analysis, the orchestrator and the DataFusion SQL REPL |
-| `src/lkml_ground_truth/pasta/` | Minimal vendored PaStA engine |
+| `src/rebuild_lost_link/` | Installable package and CLI (`rebuild-lost-link`) |
+| `src/rebuild_lost_link/steps/` | The `repo`, `matching` and `enrich` steps and their orchestrator |
+| `src/rebuild_lost_link/analysis/` | One module per analysis, the orchestrator and the DataFusion SQL REPL |
+| `src/rebuild_lost_link/pasta/` | Minimal vendored PaStA engine |
 | `scripts/` | Stand-alone export, integration and review utilities |
 | `tests/` | Automated tests |
 | `example_config.toml` | Configuration template |
@@ -441,7 +441,7 @@ The `enrich` step reads the match CSVs and writes them as Parquet under `paths.e
 
 ## Additional Resources
 
-- [Analysis Detailed Documentation](src/lkml_ground_truth/analysis/README.md)
+- [Analysis Detailed Documentation](src/rebuild_lost_link/analysis/README.md)
 - [Scripts Detailed Documentation](scripts/README.md)
 - [Example Configuration](example_config.toml)
 - [MailingListsHeritage](https://gitlab.com/ccsl-usp/codev/MailingListsHeritage) - produces the input dataset

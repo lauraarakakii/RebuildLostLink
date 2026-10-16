@@ -1,5 +1,5 @@
 # =============================================================================
-# LKML Ground Truth pipeline configuration
+# RebuildLostLink pipeline configuration
 # =============================================================================
 # This is the only file you need to edit to adjust paths, performance, and
 # matching behavior for your environment.

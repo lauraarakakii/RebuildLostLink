@@ -2,10 +2,10 @@ import dataclasses
 
 import pytest
 
-from lkml_ground_truth import cli
-from lkml_ground_truth.steps import main as steps_main
-from lkml_ground_truth.steps import repo
-from lkml_ground_truth.steps.main import STEP_NAMES, RunOptions, build_registry, run_steps
+from rebuild_lost_link import cli
+from rebuild_lost_link.steps import main as steps_main
+from rebuild_lost_link.steps import repo
+from rebuild_lost_link.steps.main import STEP_NAMES, RunOptions, build_registry, run_steps
 
 
 def _registry(calls, failing=()):

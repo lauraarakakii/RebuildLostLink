@@ -1,4 +1,4 @@
-"""Orchestrator for the analyses (``python -m lkml_ground_truth.analysis``).
+"""Orchestrator for the analyses (``python -m rebuild_lost_link.analysis``).
 
 Mirrors the MLH analysis orchestrator: every analysis lives in its own module
 and exposes ``main(config, output_dir, list_name)``. Without a selection all
@@ -149,7 +149,7 @@ def run_analyses(registry: dict[str, Callable[[], None]], selection: str | None 
 
 
 def add_arguments(parser: argparse.ArgumentParser) -> None:
-    """Analysis options, shared by this module's CLI and ``lkml-ground-truth analysis``."""
+    """Analysis options, shared by this module's CLI and ``rebuild-lost-link analysis``."""
     parser.add_argument(
         "-a",
         "--analysis",
@@ -209,8 +209,8 @@ def run(config: Config, args: argparse.Namespace) -> int:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        prog="python -m lkml_ground_truth.analysis",
-        description="Run analyses over the original and enriched LKML Ground Truth datasets.",
+        prog="python -m rebuild_lost_link.analysis",
+        description="Run analyses over the original and enriched RebuildLostLink datasets.",
     )
     parser.add_argument(
         "-c",

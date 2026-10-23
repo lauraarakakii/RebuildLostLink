@@ -43,7 +43,10 @@ Each processed patch produces one row with:
 |--------|-------------|
 | `message_id` | Email identifier from the MLH dataset |
 | `best_commit` | Hash of the best-scoring candidate commit |
-| `commit_date` | Git committer timestamp, in ISO 8601 |
+| `commit_date` | Git committer timestamp; stored as `Timestamp(µs)` in the Parquet dataset |
+| `file_size` | Number of files affected by the patch |
+| `line_size` | Number of added and removed lines in the patch |
+| `hunk_size` | Number of unified-diff hunks in the patch |
 | `score` | Similarity score (0.0 to 1.0) |
 | `is_match` | `true` when `score >= matching.interactive` |
 | `is_confident_match` | `true` when `score >= matching.autoaccept` |
@@ -347,11 +350,11 @@ make analysis
 make analysis ANALYSIS=commit_reuse LIST=netdev
 make analysis ANALYSIS=latency_per_month LIST=netdev,bpf CONFIDENT_ONLY=1
 
-# Interactive SQL REPL over the 'original' and 'enriched' tables
+# Interactive SQL REPL over the 'lkml5ws' and 'dataset' tables
 make analysis ANALYSIS=sql_querier LIST=all
 
 # One-off SQL query
-make analysis ANALYSIS=sql_querier LIST=netdev SQL='SELECT * FROM enriched LIMIT 10'
+make analysis ANALYSIS=sql_querier LIST=netdev SQL='SELECT * FROM dataset LIMIT 10'
 ```
 
 An analysis that fails is logged and does not stop the others. `sql_querier` is the only non-default analysis: it runs only when selected.
@@ -368,7 +371,7 @@ An analysis that fails is logged and does not stop the others. `sql_querier` is 
 | `match_rate_per_month` | One chart (SVG + CSV): share of patches with a match and with a confident match, per month |
 | `latency_distribution` | One chart (SVG): histogram of integration latency, with the median |
 | `latency_per_month` | One chart (SVG + CSV): monthly median latency with the interquartile range |
-| `sql_querier` | Interactive SQL REPL, or a one-off query, over `original` and `enriched` (non-default) |
+| `sql_querier` | Interactive SQL REPL, or a one-off query, over `lkml5ws` and `dataset` (non-default) |
 
 See the [Analysis Documentation](src/rebuild_lost_link/analysis/README.md) for all options and how to add a new analysis.
 
@@ -415,7 +418,7 @@ The `enrich` step reads the match CSVs and writes them as Parquet under `paths.e
 ### Analysis Implementation
 
 - **One module per analysis**: each exposes `build()` (a Polars LazyFrame, easy to test) and `main()`; `analysis/main.py` orchestrates them
-- **Polars Lazy**: analyses scan the `original` and `enriched` Parquet tables without copying the datasets
+- **Polars Lazy**: analyses scan the `lkml5ws` and `dataset` Parquet tables without copying the datasets
 - **DataFusion**: the SQL REPL registers only the `list=<name>` partitions you ask for, so one broken list never breaks queries on the others
 
 ### Vendored PaStA

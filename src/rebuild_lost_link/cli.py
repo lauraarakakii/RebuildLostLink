@@ -66,7 +66,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
 
     query_parser = subparsers.add_parser( 
         "query",
-        help="Run Polars SQL queries against the 'original' and 'enriched' "
+        help="Run Polars SQL queries against the 'lkml5ws' and 'dataset' "
         "Parquet tables. Without SQL, open an interactive REPL.",
     )
 
@@ -74,8 +74,8 @@ def build_arg_parser() -> argparse.ArgumentParser:
     "sql",
     nargs="?",
     default=None,
-    help="SQL query. Tables: 'original' (LKML5Ws dataset) and 'enriched' (matches). "
-    "Example: \"SELECT * FROM enriched WHERE is_match=true LIMIT 10\". "
+    help="SQL query. Tables: 'lkml5ws' (LKML5Ws source) and 'dataset' (matches). "
+    "Example: \"SELECT * FROM dataset WHERE is_match=true LIMIT 10\". "
     "Omit to open interactive mode."
     )
     query_parser.add_argument(

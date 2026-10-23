@@ -1,4 +1,4 @@
-"""SQL queries against the 'original' and 'enriched' Parquet datasets.
+"""SQL queries against the 'lkml5ws' and 'dataset' Parquet datasets.
 
 Both datasets are laid out as Hive partitions (``list=<name>/...``).
 This module runs queries with Apache Arrow DataFusion 
@@ -47,18 +47,18 @@ from ..config import Config
 
 logger = logging.getLogger(__name__)
 
-ORIGINAL_TABLE = "original"
-ENRICHED_TABLE = "enriched"
+LKML5WS_TABLE = "lkml5ws"
+DATASET_TABLE = "dataset"
 JOIN_KEY = "message_id"
 LIST_COLUMN = "list"
 
-_KNOWN_TABLES = frozenset((ORIGINAL_TABLE, ENRICHED_TABLE))
+_KNOWN_TABLES = frozenset((LKML5WS_TABLE, DATASET_TABLE))
 
 # Public view name -> prefix used for the private, per-list raw tables it is
-# built from (e.g. "_original_raw_0", "_original_raw_1", ...).
+# built from (e.g. "_lkml5ws_raw_0", "_lkml5ws_raw_1", ...).
 _RAW_TABLE_PREFIXES = {
-    ORIGINAL_TABLE: "_original_raw",
-    ENRICHED_TABLE: "_enriched_raw",
+    LKML5WS_TABLE: "_lkml5ws_raw",
+    DATASET_TABLE: "_dataset_raw",
 }
 
 _ALL_ALIASES = ("all", "*")
@@ -106,8 +106,8 @@ def _resolve_lists(config: Config, list_name: str | None) -> list[str]:
     names = sorted(set(originals) | set(_available_enriched_lists(config)))
     if not names:
         raise FileNotFoundError(
-            "No lists found in the original dataset "
-            f"('{config.paths.dataset_root}') or enriched dataset ('{config.paths.enriched_root}')."
+            "No lists found in the lkml5ws source "
+            f"('{config.paths.dataset_root}') or dataset ('{config.paths.enriched_root}')."
         )
     return names
 
@@ -225,7 +225,7 @@ def _build_union_view(
 
 
 class QueryContext:
-    """A DataFusion ``SessionContext`` exposing ``original``/``enriched`` views.
+    """A DataFusion ``SessionContext`` exposing ``lkml5ws``/``dataset`` views.
 
     Thin wrapper kept for interface compatibility with the rest of this
     module (and any external callers): ``.tables()`` lists the views that
@@ -262,27 +262,27 @@ def build_context(
     ctx = SessionContext()
     available_tables: set[str] = set()
 
-    if ORIGINAL_TABLE in requested_tables:
+    if LKML5WS_TABLE in requested_tables:
         root = Path(config.paths.dataset_root)
-        entries = _register_list_tables(ctx, _RAW_TABLE_PREFIXES[ORIGINAL_TABLE], root, lists)
+        entries = _register_list_tables(ctx, _RAW_TABLE_PREFIXES[LKML5WS_TABLE], root, lists)
         if entries:
-            _build_union_view(ctx, ORIGINAL_TABLE, entries)
-            available_tables.add(ORIGINAL_TABLE)
+            _build_union_view(ctx, LKML5WS_TABLE, entries)
+            available_tables.add(LKML5WS_TABLE)
         else:
             logger.warning(
-                "No original Parquet data found for lists: %s. "
+                "No lkml5ws Parquet data found for lists: %s. "
                 "Check paths.dataset_root in config.toml.",
                 lists,
             )
-    if ENRICHED_TABLE in requested_tables:
+    if DATASET_TABLE in requested_tables:
         root = Path(config.paths.enriched_root)
-        entries = _register_list_tables(ctx, _RAW_TABLE_PREFIXES[ENRICHED_TABLE], root, lists)
+        entries = _register_list_tables(ctx, _RAW_TABLE_PREFIXES[DATASET_TABLE], root, lists)
         if entries:
-            _build_union_view(ctx, ENRICHED_TABLE, entries)
-            available_tables.add(ENRICHED_TABLE)
+            _build_union_view(ctx, DATASET_TABLE, entries)
+            available_tables.add(DATASET_TABLE)
         else:
             logger.warning(
-                "No enriched Parquet data found for lists: %s. "
+                "No dataset Parquet data found for lists: %s. "
                 "Check paths.enriched_root in config.toml.",
                 lists,
             )

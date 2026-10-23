@@ -1,4 +1,4 @@
-"""Interactive SQL over the ``original`` and ``enriched`` Parquet tables.
+"""Interactive SQL over the ``lkml5ws`` and ``dataset`` Parquet tables.
 
 Powered by Apache DataFusion (see :mod:`rebuild_lost_link.analysis.query`).
 Without SQL it opens a REPL that lists the available tables and schemas, then

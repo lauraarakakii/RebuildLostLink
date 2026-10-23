@@ -119,6 +119,22 @@ def row_to_messagediff(row: dict[str, Any]) -> MessageDiff | None:
     return message_diff
 
 
+def _patch_metrics(message_diff: MessageDiff) -> dict[str, int]:
+    """Return structural size metrics for the patch in ``message_diff``.
+
+    ``Diff.lines`` counts added and removed lines, while every unified-diff
+    hunk header in ``Diff.raw`` represents one hunk.  Counting the raw
+    headers, rather than the parser's hunk map, retains repeated hunk
+    headings.
+    """
+    diff = message_diff.diff
+    return {
+        "file_size": len(diff.affected),
+        "line_size": diff.lines,
+        "hunk_size": sum(bool(Diff.HUNK_REGEX.match(line)) for line in diff.raw),
+    }
+
+
 def process_row(row: dict[str, Any]) -> dict[str, Any] | None:
     """Match a dataset patch-email row with the best candidate commit."""
     assert _config is not None and _thresholds is not None and _repo is not None
@@ -127,6 +143,7 @@ def process_row(row: dict[str, Any]) -> dict[str, Any] | None:
     message_diff = row_to_messagediff(row)
     if message_diff is None:
         return None
+    metrics = _patch_metrics(message_diff)
 
     try:
         date = row["date"]
@@ -138,6 +155,7 @@ def process_row(row: dict[str, Any]) -> dict[str, Any] | None:
             "message_id": row.get("message_id"),
             "best_commit": None,
             "commit_date": None,
+            **metrics,
             "score": None,
             "is_match": False,
             "is_confident_match": False,
@@ -174,6 +192,7 @@ def process_row(row: dict[str, Any]) -> dict[str, Any] | None:
         "message_id": row.get("message_id"),
         "best_commit": best_hash,
         "commit_date": best_commit_date,
+        **metrics,
         "score": best_score,
         "is_match": best_score is not None and best_score >= _thresholds.interactive,
         "is_confident_match": best_score is not None and best_score >= _thresholds.autoaccept,

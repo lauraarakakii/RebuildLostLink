@@ -27,8 +27,9 @@ logger = logging.getLogger(__name__)
 def evaluated_patches(config: Config, list_name: str) -> pl.LazyFrame:
     """Every evaluated patch with its email date and (UTC) commit date.
 
-    ``commit_date`` is stored as an ISO 8601 string with a UTC offset. Both
-    dates become naive UTC datetimes so they can be subtracted.
+    ``commit_date`` is stored as a microsecond timestamp.  The cast also
+    accepts older ISO 8601 output, so previous datasets remain analyzable.
+    Both dates become naive UTC datetimes so they can be subtracted.
     ``latency_days`` is only set for rows with a commit date, and can be
     slightly negative because the matching window starts ``days_before`` days
     before the email date.
@@ -40,7 +41,8 @@ def evaluated_patches(config: Config, list_name: str) -> pl.LazyFrame:
         pl.col("is_match").fill_null(False),
         pl.col("is_confident_match").fill_null(False),
         pl.col("commit_date")
-        .str.to_datetime(time_zone="UTC", strict=False)
+        .cast(pl.Utf8)
+        .str.to_datetime(time_unit="us", time_zone="UTC", strict=False)
         .dt.replace_time_zone(None)
         .alias("commit_date"),
     )

@@ -14,6 +14,24 @@ logger = logging.getLogger(__name__)
 MATCH_COLUMNS = ("best_commit", "score", "is_match", "is_confident_match") 
 JOIN_KEY = "message_id"
 
+
+def _normalise_commit_date(matches: pl.DataFrame) -> pl.DataFrame:
+    """Store commit dates as timezone-free microsecond timestamps in Parquet.
+
+    Match CSVs use ISO 8601 strings, including their UTC offsets.  Parsing
+    before writing the analytical dataset keeps the instant in UTC while
+    making the on-disk Arrow type ``timestamp[us]``.
+    """
+    if "commit_date" not in matches.columns:
+        return matches
+    return matches.with_columns(
+        pl.col("commit_date")
+        .cast(pl.Utf8)
+        .str.to_datetime(time_unit="us", time_zone="UTC", strict=False)
+        .dt.replace_time_zone(None)
+        .alias("commit_date")
+    )
+
 def enrich_list(config: Config, list_name: str) -> None:
     """Write enriched Parquet data for one list (source rows plus match columns)."""
     # glob_path = config.paths.parquet_glob(list_name)
@@ -34,7 +52,7 @@ def enrich_list(config: Config, list_name: str) -> None:
     # logger.info("Lendo matches: %s", matches_path)
     # matches = pl.read_csv(matches_path)
 
-    matches = pl.read_csv(matches_path)
+    matches = _normalise_commit_date(pl.read_csv(matches_path))
     matched = matches.get_column("best_commit").is_not_null().sum()
     logger.info("-> %d rows in match CSV (%d with a commit)", matches.height, matched)
 

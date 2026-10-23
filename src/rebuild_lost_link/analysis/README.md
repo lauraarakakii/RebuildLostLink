@@ -4,11 +4,11 @@ Reproducible analyses over the matching results: how many patch emails were link
 
 ## Overview
 
-Each analysis is a small module that reads the `original` (MLH dataset) and `enriched` (matching results) Parquet tables, and writes its result to an output directory. An orchestrator runs every default analysis, or a single one by name. Data is handled with Polars lazy frames, so nothing is copied and large datasets stay manageable. The integration-time analyses make the linked email/commit pairs useful for empirical studies of Linux patch lifecycles.
+Each analysis is a small module that reads the `lkml5ws` (MLH source) and `dataset` (matching results) Parquet tables, and writes its result to an output directory. An orchestrator runs every default analysis, or a single one by name. Data is handled with Polars lazy frames, so nothing is copied and large datasets stay manageable. The integration-time analyses make the linked email/commit pairs useful for empirical studies of Linux patch lifecycles.
 
 ```
 ┌─────────────────┐     ┌─────────────────┐
-│    original     │     │    enriched     │
+│    lkml5ws      │     │    dataset      │
 │  (MLH dataset)  │     │ (match results) │
 └────────┬────────┘     └────────┬────────┘
          └──────────┬────────────┘
@@ -65,7 +65,7 @@ make analysis ANALYSIS=latency_per_month LIST=netdev,bpf CONFIDENT_ONLY=1
 
 # Interactive SQL
 make analysis ANALYSIS=sql_querier LIST=all
-make analysis ANALYSIS=sql_querier LIST=netdev SQL='SELECT * FROM enriched LIMIT 10'
+make analysis ANALYSIS=sql_querier LIST=netdev SQL='SELECT * FROM dataset LIMIT 10'
 
 # Directly, without Make
 uv run rebuild-lost-link --config config.toml analysis --analysis latency_per_month --list netdev
@@ -76,8 +76,8 @@ uv run python -m rebuild_lost_link.analysis --config config.toml
 
 | Directory | Purpose |
 |-----------|---------|
-| `paths.dataset_root` | Input: MLH Parquet dataset (`list=<name>/*.parquet`), the `original` table |
-| `paths.enriched_root` | Input: matching results (`list=<name>/data.parquet`), the `enriched` table |
+| `paths.dataset_root` | Input: MLH Parquet dataset (`list=<name>/*.parquet`), the `lkml5ws` table |
+| `paths.enriched_root` | Input: matching results (`list=<name>/data.parquet`), the `dataset` table |
 | `output/analysis/` | Output: analysis results and figures (ignored by Git) |
 
 ## Available Analyses
@@ -96,7 +96,7 @@ uv run rebuild-lost-link --config config.toml analysis --analysis score_bands
 
 ### dataset_coverage.py
 
-Pipeline coverage relative to all source emails: original emails, patches evaluated, matches, confident matches and errors, per list. Uses `original` and `enriched`.
+Pipeline coverage relative to all source emails: source emails, patches evaluated, matches, confident matches and errors, per list. Uses `lkml5ws` and `dataset`.
 
 ### match_coverage.py
 
@@ -144,11 +144,11 @@ To add a new chart, create a module that exposes `main(config, output_dir, list_
 
 ### sql_querier.py
 
-Interactive SQL interface using [Apache DataFusion](https://datafusion.apache.org/user-guide/sql/index.html). Registers the `original` and `enriched` tables for the selected lists, shows their schemas and prompts for SQL queries. With `SQL`, it runs one query and exits. Results can be saved with `OUTPUT` (CSV, Parquet, JSON or NDJSON). This is a non-default analysis: it only runs when explicitly selected.
+Interactive SQL interface using [Apache DataFusion](https://datafusion.apache.org/user-guide/sql/index.html). Registers the `lkml5ws` and `dataset` tables for the selected lists, shows their schemas and prompts for SQL queries. With `SQL`, it runs one query and exits. Results can be saved with `OUTPUT` (CSV, Parquet, JSON or NDJSON). This is a non-default analysis: it only runs when explicitly selected.
 
 ```bash
 make analysis ANALYSIS=sql_querier
-make analysis ANALYSIS=sql_querier SQL='SELECT list, count(*) FROM enriched GROUP BY list' OUTPUT=output/by_list.csv
+make analysis ANALYSIS=sql_querier SQL='SELECT list, count(*) FROM dataset GROUP BY list' OUTPUT=output/by_list.csv
 ```
 
 ## Output
@@ -176,7 +176,7 @@ output/analysis/
 └── integration_cdf.svg
 ```
 
-`commit_date` is the Git *committer* date, in ISO 8601. It is only present in pipeline runs made after this column was added, so temporal analyses need a recent run.
+`commit_date` is the Git *committer* date, stored in the generated Parquet as `Timestamp(µs)`. It is only present in pipeline runs made after this column was added, so temporal analyses need a recent run.
 
 ## Configuration
 

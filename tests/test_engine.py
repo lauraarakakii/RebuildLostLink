@@ -7,7 +7,10 @@ import rebuild_lost_link.engine as engine
 def test_process_row_includes_selected_commit_committer_date(monkeypatch):
     """The exported date belongs to the same commit selected as the best match."""
     commit_date = datetime(2026, 9, 27, 10, 30, tzinfo=UTC)
-    message_diff = SimpleNamespace(message=["subject"], diff=SimpleNamespace(affected=[]))
+    message_diff = SimpleNamespace(
+        message=["subject"],
+        diff=SimpleNamespace(affected=["a", "b"], lines=3, raw=["@@ -1 +1 @@"]),
+    )
     commit = SimpleNamespace(
         message=["subject"],
         diff=SimpleNamespace(),
@@ -38,3 +41,4 @@ def test_process_row_includes_selected_commit_committer_date(monkeypatch):
 
     assert result["best_commit"] == "abcdef"
     assert result["commit_date"] == "2026-09-27T10:30:00+00:00"
+    assert (result["file_size"], result["line_size"], result["hunk_size"]) == (2, 3, 1)

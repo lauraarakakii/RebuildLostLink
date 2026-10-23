@@ -210,7 +210,7 @@ def run(config: Config, args: argparse.Namespace) -> int:
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="python -m rebuild_lost_link.analysis",
-        description="Run analyses over the original and enriched RebuildLostLink datasets.",
+        description="Run analyses over the lkml5ws and dataset RebuildLostLink tables.",
     )
     parser.add_argument(
         "-c",

@@ -25,10 +25,12 @@ from .plotting import format_date_axis, new_chart, save_chart
 logger = logging.getLogger(__name__)
 
 NAME = "matched_pairs"
-FOCUS_LISTS = ("amd-gfx", "iio", "alsa-devel")
+# ``linux-iio`` is the canonical partition name in the MLH-derived output.
+FOCUS_LISTS = ("amd-gfx", "linux-iio", "alsa-devel")
 START = datetime(2016, 5, 1)
 END = datetime(2026, 6, 1)
 PERIOD_MIDPOINT = datetime(2021, 5, 1)
+MAX_QUADRANT_POINTS_PER_LIST = 5_000
 NOTE = (
     "Only matched patches submitted from May 2016 through May 2026 are shown; "
     "latency is commit date minus email date."
@@ -143,29 +145,59 @@ def plot_latency_cdf(pairs: pl.DataFrame, output: Path) -> None:
 
 
 def plot_quadrants(pairs: pl.DataFrame, output: Path) -> None:
-    """Draw the requested Cartesian plane for shorter and longer periods."""
-    fig, ax, palette = new_chart("Plano cartesiano dos períodos de integração")
+    """Draw the Cartesian plane with a symmetric logarithmic latency axis.
+
+    ``symlog`` preserves the rare zero/negative latencies allowed by the
+    candidate window while revealing the dense cluster of short integrations
+    and the long-tail cases in the same plot.
+    """
+    fig, ax, palette = new_chart("Plano cartesiano dos períodos de integração (escala logarítmica)")
     median_latency = pairs["latency_days"].median()
     assert median_latency is not None
 
     for index, list_label in enumerate(FOCUS_LISTS):
         values = pairs.filter(pl.col("list") == list_label)
         if not values.is_empty():
+            plotted = values.sample(n=min(values.height, MAX_QUADRANT_POINTS_PER_LIST), seed=index)
             ax.scatter(
-                values["email_date"].to_list(),
-                values["latency_days"].to_list(),
+                plotted["email_date"].to_list(),
+                plotted["latency_days"].to_list(),
                 color=palette[index],
-                alpha=0.5,
-                s=18,
-                label=list_label,
+                alpha=0.28,
+                s=10,
+                label=(
+                    list_label
+                    if values.height <= MAX_QUADRANT_POINTS_PER_LIST
+                    else f"{list_label} (amostra de {MAX_QUADRANT_POINTS_PER_LIST:,})"
+                ),
+                zorder=2,
             )
 
-    ax.axvline(PERIOD_MIDPOINT, color="black", linewidth=1)
-    ax.axhline(median_latency, color="black", linewidth=1)
+    ax.axvline(PERIOD_MIDPOINT, color="black", linewidth=1, linestyle="--", zorder=1)
+    ax.axhline(median_latency, color="black", linewidth=1, linestyle="--", zorder=1)
+    ax.set_yscale("symlog", linthresh=1, linscale=0.8)
     ax.set_xlabel("Data de submissão (período inicial ← → período final)")
-    ax.set_ylabel("Período de integração (dias)")
-    ax.annotate("P. maiores", (START, median_latency), xytext=(8, 8), textcoords="offset points")
-    ax.annotate("P. menores", (START, median_latency), xytext=(8, -16), textcoords="offset points")
+    ax.set_ylabel("Período de integração (dias, escala logarítmica)")
+    ax.text(
+        0.02,
+        0.97,
+        "P. maiores",
+        transform=ax.transAxes,
+        ha="left",
+        va="top",
+        fontsize=9,
+        weight="medium",
+    )
+    ax.text(
+        0.02,
+        0.03,
+        "P. menores",
+        transform=ax.transAxes,
+        ha="left",
+        va="bottom",
+        fontsize=9,
+        weight="medium",
+    )
     ax.text(
         PERIOD_MIDPOINT,
         median_latency,
@@ -173,6 +205,7 @@ def plot_quadrants(pairs: pl.DataFrame, output: Path) -> None:
         ha="left",
         va="bottom",
         fontsize=8,
+        bbox={"facecolor": "white", "alpha": 0.8, "edgecolor": "none"},
     )
     ax.legend(title="Lista")
     format_date_axis(ax)

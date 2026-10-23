@@ -103,7 +103,7 @@ def plot_heatmap(frame: pl.DataFrame, output: Path) -> None:
         cbar_kws={"label": "Match rate", "ticks": boundaries[::2]},
         ax=ax,
     )
-    ax.set_title("Match rate by patch size (5 percentage-point color steps)")
+    ax.set_title("Match rate by patch size ")
     ax.set_xlabel("Changed lines in patch")
     ax.set_ylabel("Mailing list")
     save(fig, output)

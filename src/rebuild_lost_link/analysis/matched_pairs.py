@@ -1,12 +1,11 @@
-"""Focused integration analysis for amd-gfx, iio, and alsa-devel.
+"""Focused integration analysis for amd-gfx, iio, alsa-devel, and linux-scsi.
 
 The analysis is deliberately limited to submissions dated from May 2016 through
 May 2026. It keeps the matched-pair table for reproducibility and produces
-three complementary figures: monthly volume, a per-list latency CDF, and an
-adapted Cartesian quadrant plot. In the latter, the horizontal split is the
-midpoint of the study period and the vertical split is the observed median
-integration period: ``P. menores`` are below that median and ``P. maiores``
-are at or above it.
+three complementary figures: a biweekly volume zoom, a per-list latency CDF,
+and an adapted Cartesian quadrant plot. In the latter, the horizontal split is
+the midpoint of the study period and the vertical split is the observed median
+integration period.
 """
 
 from __future__ import annotations
@@ -26,10 +25,12 @@ logger = logging.getLogger(__name__)
 
 NAME = "matched_pairs"
 # ``linux-iio`` is the canonical partition name in the MLH-derived output.
-FOCUS_LISTS = ("amd-gfx", "linux-iio", "alsa-devel")
+FOCUS_LISTS = ("amd-gfx", "linux-iio", "alsa-devel", "linux-scsi")
 START = datetime(2016, 5, 1)
 END = datetime(2026, 6, 1)
 PERIOD_MIDPOINT = datetime(2021, 5, 1)
+ZOOM_START = datetime(2024, 1, 1)
+ZOOM_END = datetime(2026, 1, 1)
 MAX_QUADRANT_POINTS_PER_LIST = 5_000
 NOTE = (
     "Only matched patches submitted from May 2016 through May 2026 are shown; "
@@ -102,46 +103,76 @@ def monthly_summary(pairs: pl.LazyFrame) -> pl.LazyFrame:
     )
 
 
-def plot_monthly(monthly: pl.DataFrame, output: Path) -> None:
-    """Draw matched-patch volume over time for the three lists."""
-    fig, ax, palette = new_chart("Patches com match por mês (maio/2016–maio/2026)")
+def biweekly_summary(pairs: pl.LazyFrame) -> pl.LazyFrame:
+    """Count matched patches per two-week interval in the two full recent years."""
+    return (
+        pairs.filter((pl.col("email_date") >= ZOOM_START) & (pl.col("email_date") < ZOOM_END))
+        .with_columns(pl.col("email_date").dt.truncate("2w").alias("period"))
+        .group_by("list", "period")
+        .agg(pl.len().alias("matched_patches"))
+        .sort("list", "period")
+    )
+
+
+def plot_biweekly(biweekly: pl.DataFrame, output: Path) -> None:
+    """Zoom into 2024–2025 with biweekly matched-patch counts."""
+    fig, ax, palette = new_chart("Matched patches per fortnight (2024–2025)")
     for index, list_label in enumerate(FOCUS_LISTS):
-        values = monthly.filter(pl.col("list") == list_label)
+        values = biweekly.filter(pl.col("list") == list_label)
         if not values.is_empty():
             ax.plot(
-                values["month"].to_list(),
+                values["period"].to_list(),
                 values["matched_patches"].to_list(),
                 color=palette[index],
                 label=list_label,
             )
-    ax.set_xlabel("Mês de submissão")
-    ax.set_ylabel("Patches com match")
-    ax.legend(title="Lista")
+    ax.set_xlabel("Patch email date (Date: header)")
+    ax.set_ylabel("Matched patches")
+    ax.legend(title="Mailing list")
     format_date_axis(ax)
-    save_chart(fig, output, NOTE)
+    save_chart(
+        fig,
+        output,
+        "Uses the original Date: email timestamp; Git author dates can be rewritten during merges.",
+    )
 
 
 def plot_latency_cdf(pairs: pl.DataFrame, output: Path) -> None:
-    """Draw empirical integration-time CDFs, one line per mailing list."""
-    fig, ax, palette = new_chart("Período de integração por lista")
+    """Draw latency CDFs on a base-10 logarithmic day axis.
+
+    The log axis starts at one day. Earlier (and rare negative) observations
+    are grouped at that first tick, retaining their contribution to the CDF
+    while keeping ticks in intuitive day, ten-day, and hundred-day units.
+    """
+    fig, ax, palette = new_chart("Integration latency by mailing list")
     for index, list_label in enumerate(FOCUS_LISTS):
-        values = pairs.filter(pl.col("list") == list_label).sort("latency_days")
+        values = (
+            pairs.filter(pl.col("list") == list_label)
+            .with_columns(pl.col("latency_days").clip(lower_bound=1).alias("latency_for_plot"))
+            .sort("latency_for_plot")
+        )
         if values.is_empty():
             continue
         share = [(rank + 1) / values.height for rank in range(values.height)]
         ax.step(
-            values["latency_days"].to_list(),
+            values["latency_for_plot"].to_list(),
             share,
             where="post",
             color=palette[index],
             label=f"{list_label} (n={values.height})",
         )
-    ax.set_xlabel("Período de integração (dias)")
-    ax.set_ylabel("Proporção acumulada de patches com match")
+    ax.set_xscale("log", base=10)
+    ax.set_xlabel("Integration latency (days, logarithmic scale)")
+    ax.set_ylabel("Cumulative share of matched patches")
     ax.set_ylim(0, 1)
     ax.yaxis.set_major_formatter("{x:.0%}")
-    ax.legend(title="Lista")
-    save_chart(fig, output, NOTE)
+    ax.legend(title="Mailing list")
+    save_chart(
+        fig,
+        output,
+        "Latency is mainline commit date minus the patch email Date: timestamp; "
+        "all observations of one day or less are grouped at the one-day tick.",
+    )
 
 
 def plot_quadrants(pairs: pl.DataFrame, output: Path) -> None:
@@ -151,7 +182,7 @@ def plot_quadrants(pairs: pl.DataFrame, output: Path) -> None:
     candidate window while revealing the dense cluster of short integrations
     and the long-tail cases in the same plot.
     """
-    fig, ax, palette = new_chart("Plano cartesiano dos períodos de integração (escala logarítmica)")
+    fig, ax, palette = new_chart("Integration latency quadrants (logarithmic scale)")
     median_latency = pairs["latency_days"].median()
     assert median_latency is not None
 
@@ -168,7 +199,7 @@ def plot_quadrants(pairs: pl.DataFrame, output: Path) -> None:
                 label=(
                     list_label
                     if values.height <= MAX_QUADRANT_POINTS_PER_LIST
-                    else f"{list_label} (amostra de {MAX_QUADRANT_POINTS_PER_LIST:,})"
+                    else f"{list_label} (sample of {MAX_QUADRANT_POINTS_PER_LIST:,})"
                 ),
                 zorder=2,
             )
@@ -176,12 +207,12 @@ def plot_quadrants(pairs: pl.DataFrame, output: Path) -> None:
     ax.axvline(PERIOD_MIDPOINT, color="black", linewidth=1, linestyle="--", zorder=1)
     ax.axhline(median_latency, color="black", linewidth=1, linestyle="--", zorder=1)
     ax.set_yscale("symlog", linthresh=1, linscale=0.8)
-    ax.set_xlabel("Data de submissão (período inicial ← → período final)")
-    ax.set_ylabel("Período de integração (dias, escala logarítmica)")
+    ax.set_xlabel("Patch email date (early period ← → late period)")
+    ax.set_ylabel("Integration latency (days, symmetric logarithmic scale)")
     ax.text(
         0.02,
         0.97,
-        "P. maiores",
+        "Longer periods",
         transform=ax.transAxes,
         ha="left",
         va="top",
@@ -191,7 +222,7 @@ def plot_quadrants(pairs: pl.DataFrame, output: Path) -> None:
     ax.text(
         0.02,
         0.03,
-        "P. menores",
+        "Shorter periods",
         transform=ax.transAxes,
         ha="left",
         va="bottom",
@@ -201,23 +232,25 @@ def plot_quadrants(pairs: pl.DataFrame, output: Path) -> None:
     ax.text(
         PERIOD_MIDPOINT,
         median_latency,
-        f"mediana = {median_latency:.1f} dias",
+        f"median = {median_latency:.1f} days",
         ha="left",
         va="bottom",
         fontsize=8,
         bbox={"facecolor": "white", "alpha": 0.8, "edgecolor": "none"},
     )
-    ax.legend(title="Lista")
+    ax.legend(title="Mailing list")
     format_date_axis(ax)
     save_chart(fig, output, NOTE)
 
 
 def main(config: Config, output_dir: str, list_name: str = "all") -> None:
-    """Write the focused table, monthly summary, and its three figures."""
+    """Write the focused table, summaries, and its three figures."""
     pairs = build(config, list_name).collect()
     write_csv(pairs, output_dir, NAME)
     monthly = monthly_summary(pairs.lazy()).collect()
     write_csv(monthly, output_dir, f"{NAME}_monthly")
+    biweekly = biweekly_summary(pairs.lazy()).collect()
+    write_csv(biweekly, output_dir, f"{NAME}_biweekly")
     if pairs.is_empty():
         logger.warning(
             "No matched pairs for %s between May 2016 and May 2026; skipping figures.",
@@ -226,7 +259,7 @@ def main(config: Config, output_dir: str, list_name: str = "all") -> None:
         return
 
     output = Path(output_dir)
-    plot_monthly(monthly, output / f"{NAME}_monthly.svg")
+    plot_biweekly(biweekly, output / f"{NAME}_biweekly.svg")
     plot_latency_cdf(pairs, output / f"{NAME}_latency_cdf.svg")
     plot_quadrants(pairs, output / f"{NAME}_quadrants.svg")
     logger.info("Saved focused matched-pairs figures to %s", output)

@@ -27,6 +27,7 @@ from . import (
     match_rate_per_month,
     matched_pairs,
     patch_size_outcomes,
+    patch_size_outcomes_by_sender,
     patches_per_month,
     score_bands,
     sql_querier,
@@ -46,6 +47,7 @@ ANALYSIS_NAMES = (
     "matched_pairs",
     "discussion_context",
     "patch_size_outcomes",
+    "patch_size_outcomes_by_sender",
     "patches_per_month",
     "match_rate_per_month",
     "latency_distribution",
@@ -84,6 +86,9 @@ def build_registry(options: RunOptions) -> dict[str, Callable[[], None]]:
         "matched_pairs": lambda: matched_pairs.main(config, out, lists),
         "discussion_context": lambda: discussion_context.main(config, out, lists),
         "patch_size_outcomes": lambda: patch_size_outcomes.main(config, out, lists),
+        "patch_size_outcomes_by_sender": lambda: patch_size_outcomes_by_sender.main(
+            config, out, lists
+        ),
         # one chart per analysis
         "patches_per_month": lambda: patches_per_month.main(
             config, out, lists, confident_only=options.confident_only

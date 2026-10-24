@@ -126,6 +126,10 @@ Joins thread metadata from `original` with match outcomes. It compares initial s
 
 Joins the original patch text with match outcomes. It estimates changed lines from added and removed diff lines, then reports matching outcomes by size band. This supports analysis of whether patch complexity is associated with integration.
 
+### patch_size_outcomes_by_sender.py
+
+Extends `patch_size_outcomes` by grouping every size band by sender type.
+
 ### Charts (one analysis = one chart = one image)
 
 Five analyses study the results over time or by integration latency. Each one draws **a single chart** and saves **a single image**; the shared data queries live in `temporal_data.py` and the matplotlib helpers in `plotting.py` (neither is an analysis).
@@ -165,6 +169,7 @@ output/analysis/
 ├── matched_pairs.csv
 ├── discussion_context.csv
 ├── patch_size_outcomes.csv
+├── patch_size_outcomes_by_sender.csv
 ├── patches_per_month.csv
 ├── patches_per_month.svg
 ├── match_rate_per_month.csv
@@ -186,7 +191,7 @@ Paths come from `config.toml` (`paths.dataset_root`, `paths.enriched_root`). Eve
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `ANALYSIS` | *(empty)* | Run a single analysis by name instead of all default ones. Valid names: `dataset_coverage`, `match_coverage`, `score_bands`, `match_errors`, `commit_reuse`, `matched_pairs`, `discussion_context`, `patch_size_outcomes`, `patches_per_month`, `match_rate_per_month`, `latency_distribution`, `latency_per_month`, `integration_cdf`, `sql_querier`†. († non-default, only runs when explicitly selected) |
+| `ANALYSIS` | *(empty)* | Run a single analysis by name instead of all default ones. Valid names: `dataset_coverage`, `match_coverage`, `score_bands`, `match_errors`, `commit_reuse`, `matched_pairs`, `discussion_context`, `patch_size_outcomes`, `patch_size_outcomes_by_sender`, `patches_per_month`, `match_rate_per_month`, `latency_distribution`, `latency_per_month`, `integration_cdf`, `sql_querier`†. († non-default, only runs when explicitly selected) |
 | `LIST` | `all` | Mailing list(s) to analyze: a name, a comma-separated list (`netdev,bpf`) or `all` |
 | `RESULTS_DIR` | `output/analysis` | Directory for analysis output |
 | `CONFIG` | `config.toml` | Configuration file |

@@ -18,6 +18,13 @@ def analysis_config(tmp_path):
     pl.DataFrame(
         {
             "message_id": ["a", "b", "c", "d", "e"],
+            "from": [
+                "Alice <alice@amd.com>",
+                "Bob <bob@kernel.org>",
+                "Carol <carol@example.com>",
+                "Dan <dan@redhat.com>",
+                "Eve <eve@example.com>",
+            ],
             "date": [
                 datetime(2024, 1, 10),
                 datetime(2024, 1, 20),

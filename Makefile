@@ -24,6 +24,7 @@ STEP ?=
 # Analysis selection. Leave ANALYSIS empty to run every default analysis, or
 # name one: dataset_coverage, match_coverage, score_bands, match_errors,
 # commit_reuse, matched_pairs, discussion_context, patch_size_outcomes,
+# patch_size_outcomes_by_sender,
 # latency_distribution, latency_per_month, integration_cdf or sql_querier (interactive).
 # LIST accepts a name, a comma-separated list, or "all" (the default).
 LIST ?=

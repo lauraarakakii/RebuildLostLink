@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from datetime import datetime
+
 import polars as pl
 
 from ..config import Config
@@ -9,6 +11,11 @@ from .common import count_true, write_csv
 from .datasets import scan_enriched, scan_original
 
 NAME = "patch_size_outcomes"
+
+# Analytical window: patches submitted between May 2016 and May 2026,
+# defined by the email date (not the commit date).
+WINDOW_START = datetime(2016, 5, 1)
+WINDOW_END = datetime(2026, 6, 1)  # exclusive upper bound
 
 
 def build(config: Config, list_name: str) -> pl.LazyFrame:
@@ -32,7 +39,9 @@ def build(config: Config, list_name: str) -> pl.LazyFrame:
     )
     original = (
         scan_original(config, list_name)
-        .select("list", "message_id", "code")
+        .select("list", "message_id", "code", "date")
+        .filter(pl.col("date") >= WINDOW_START)
+        .filter(pl.col("date") < WINDOW_END)
         .filter(pl.col("code").list.len() > 0)
         .unique(subset=["list", "message_id"], keep="first")
         .with_columns(changed_lines)

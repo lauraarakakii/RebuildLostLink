@@ -1,9 +1,5 @@
 #!/usr/bin/env python3
-"""Exporta commits do clone oficial do Linux para JSON Lines.
-
-Cada linha de saída contém ``commit_id`` e ``diff``. JSONL é usado porque um
-diff pode conter vírgulas, aspas e várias linhas sem tornar o arquivo ambíguo.
-"""
+"""Export commits from a Linux clone as JSON Lines (``commit_id`` and ``diff`` per line)."""
 
 from __future__ import annotations
 
@@ -19,12 +15,11 @@ def git(repo: Path, *args: str, input_text: str | None = None) -> str:
         ["git", "-C", str(repo), *args],
         input=input_text,
         text=True,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
+        capture_output=True,
         check=False,
     )
     if result.returncode:
-        raise RuntimeError(result.stderr.strip() or "git retornou erro")
+        raise RuntimeError(result.stderr.strip() or "git failed")
     return result.stdout
 
 
@@ -50,15 +45,15 @@ def commit_ids(args: argparse.Namespace) -> list[str]:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--repo", type=Path, required=True, help="Clone local do Linux.")
-    parser.add_argument("--output", type=Path, required=True, help="Arquivo .jsonl de saída.")
-    parser.add_argument("--ref", default="HEAD", help="Ref a percorrer (padrão: HEAD).")
-    parser.add_argument("--since", help="Data inicial aceita pelo git, por exemplo 2025-01-01.")
-    parser.add_argument("--until", help="Data final aceita pelo git, por exemplo 2025-12-31.")
+    parser.add_argument("--repo", type=Path, required=True, help="Local Linux clone.")
+    parser.add_argument("--output", type=Path, required=True, help="Output .jsonl file.")
+    parser.add_argument("--ref", default="HEAD", help="Ref to walk (default: HEAD).")
+    parser.add_argument("--since", help="Start date accepted by git, e.g. 2025-01-01.")
+    parser.add_argument("--until", help="End date accepted by git, e.g. 2025-12-31.")
     parser.add_argument(
         "--commit-list",
         type=Path,
-        help="Arquivo com um commit hash por linha; limita a exportação a esta lista.",
+        help="File with one commit hash per line; restricts the export to these commits.",
     )
     return parser.parse_args()
 
@@ -66,14 +61,14 @@ def parse_args() -> argparse.Namespace:
 def main() -> None:
     args = parse_args()
     if not args.repo.is_dir():
-        raise SystemExit(f"Clone Git não encontrado: {args.repo}")
+        raise SystemExit(f"Git clone not found: {args.repo}")
     if args.commit_list and not args.commit_list.is_file():
-        raise SystemExit(f"Lista de commits não encontrada: {args.commit_list}")
+        raise SystemExit(f"Commit list not found: {args.commit_list}")
 
     try:
         ids = commit_ids(args)
     except RuntimeError as exc:
-        raise SystemExit(f"Não foi possível consultar o repositório: {exc}") from exc
+        raise SystemExit(f"Could not query the repository: {exc}") from exc
 
     args.output.parent.mkdir(parents=True, exist_ok=True)
     written = 0
@@ -90,13 +85,13 @@ def main() -> None:
                     commit_id,
                 )
             except RuntimeError as exc:
-                print(f"AVISO: ignorando {commit_id}: {exc}", file=sys.stderr)
+                print(f"WARNING: skipping {commit_id}: {exc}", file=sys.stderr)
                 continue
             output.write(json.dumps({"commit_id": commit_id, "diff": diff}, ensure_ascii=False))
             output.write("\n")
             written += 1
 
-    print(f"Exportados {written} commits para {args.output}")
+    print(f"Exported {written} commits to {args.output}")
 
 
 if __name__ == "__main__":

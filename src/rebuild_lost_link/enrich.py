@@ -1,4 +1,4 @@
-"""Enrichment: join matching results back into the original dataset."""
+"""Enrichment: persist the match CSVs as Parquet partitioned by mailing list."""
 
 from __future__ import annotations
 
@@ -11,76 +11,44 @@ from .config import Config
 
 logger = logging.getLogger(__name__)
 
-MATCH_COLUMNS = ("best_commit", "score", "is_match", "is_confident_match") 
-JOIN_KEY = "message_id"
 
+def enrich_list(config: Config, list_name: str) -> None:
+    """Write ``list=<name>/data.parquet`` from the list's match CSV.
 
-def _normalise_commit_date(matches: pl.DataFrame) -> pl.DataFrame:
-    """Store commit dates as timezone-free microsecond timestamps in Parquet.
-
-    Match CSVs use ISO 8601 strings, including their UTC offsets.  Parsing
-    before writing the analytical dataset keeps the instant in UTC while
-    making the on-disk Arrow type ``timestamp[us]``.
+    ``commit_date`` (ISO 8601 with UTC offset in the CSV) becomes a timezone-free
+    UTC ``timestamp[us]`` so it can be compared with email dates.
     """
-    if "commit_date" not in matches.columns:
-        return matches
-    return matches.with_columns(
+    matches_path = Path(config.paths.resolved_output_path(list_name))
+    output_path = Path(config.paths.enriched_parquet_path(list_name))
+    if not matches_path.exists():
+        raise FileNotFoundError(
+            f"Match CSV not found for list '{list_name}': {matches_path}. "
+            "Run the matching step first."
+        )
+
+    matches = pl.read_csv(matches_path).with_columns(
         pl.col("commit_date")
         .cast(pl.Utf8)
         .str.to_datetime(time_unit="us", time_zone="UTC", strict=False)
         .dt.replace_time_zone(None)
-        .alias("commit_date")
     )
-
-def enrich_list(config: Config, list_name: str) -> None:
-    """Write enriched Parquet data for one list (source rows plus match columns)."""
-    # glob_path = config.paths.parquet_glob(list_name)
-    matches_path = Path(config.paths.resolved_output_path(list_name))
-    output_path = Path(config.paths.enriched_parquet_path(list_name))
-
-    # logger.info("=== Enriquecendo lista: %s ===", list_name)
-
-    if not matches_path.exists(): 
-        raise FileNotFoundError( 
-            f"Match CSV was not found for list '{list_name}': {matches_path}. "
-            "Run the pipeline first ('rebuild-lost-link run')."
-        )
-
-    # logger.info("Lendo dataset original: %s", glob_path)
-    # df = read_parquet_safe(glob_path)
-
-    # logger.info("Lendo matches: %s", matches_path)
-    # matches = pl.read_csv(matches_path)
-
-    matches = _normalise_commit_date(pl.read_csv(matches_path))
-    matched = matches.get_column("best_commit").is_not_null().sum()
-    logger.info("-> %d rows in match CSV (%d with a commit)", matches.height, matched)
-
+    logger.info(
+        "%s: %d rows (%d with a commit)",
+        list_name,
+        matches.height,
+        matches["best_commit"].is_not_null().sum(),
+    )
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    # enriched.write_parquet(output_path)
-    # logger.info("Dataset enriquecido salvo em %s", output_path)
     matches.write_parquet(output_path)
-    logger.info("Parquet salvo em %s", output_path)
+
 
 def run(config: Config) -> None:
-    """Enrichment entry point for one list or every available list."""
     list_name = config.paths.list_name
-
-    if list_name.lower() in ("all", "*"):
-        available = config.paths.available_output_lists()
-        if not available:
-            logger.warning(
-                "list_name = '%s', but no match CSVs were found at '%s'. "
-                "Run the pipeline first or check paths.output_path in config.toml.",
-                list_name,
-                config.paths.output_path,
-            )
-            return
-        logger.info("list_name = '%s' -> enriching all %d lists",
-                    list_name,
-                    len(available),
-                    )
-        for name in available: 
-            enrich_list(config, name)
-    else:
+    if list_name.lower() not in ("all", "*"):
         enrich_list(config, list_name)
+        return
+    available = config.paths.available_output_lists()
+    if not available:
+        logger.warning("No match CSVs found at '%s'.", config.paths.output_path)
+    for name in available:
+        enrich_list(config, name)

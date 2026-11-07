@@ -15,7 +15,6 @@ CommitIndex = dict[str, list[tuple[int, str]]]
 
 
 def _parse_git_log_dump(text: str) -> CommitIndex:
-    """Parse ``git log --name-only --format=\\x01%H %ct`` output."""
     index: dict[str, list[tuple[int, str]]] = defaultdict(list)
     current_hash: str | None = None
     current_ts: int | None = None
@@ -40,10 +39,6 @@ def _parse_git_log_dump(text: str) -> CommitIndex:
 
 
 def build_commit_index(repo_path: str) -> CommitIndex:
-    """Run ``git log --name-only`` once over the complete repository.
-
-    Return ``{file: [(timestamp, commit_hash), ...]}`` ordered by time.
-    """
     logger.info(
         "Building file-to-commit index from %s (one pass; this may take a few "
         "minutes for large histories)...",
@@ -57,19 +52,14 @@ def build_commit_index(repo_path: str) -> CommitIndex:
         check=False,
     )
     if result.returncode != 0:
-        raise RuntimeError(
-            f"git log failed while building the index: {result.stderr.strip()}"
-        )
+        raise RuntimeError(f"git log failed while building the index: {result.stderr.strip()}")
 
     index = _parse_git_log_dump(result.stdout)
     logger.info("Index built: %d distinct files.", len(index))
     return index
 
 
-def load_or_build_index(
-    repo_path: str, cache_path: str, rebuild: bool = False
-) -> CommitIndex:
-    """Load the index from ``cache_path`` or build and cache it."""
+def load_or_build_index(repo_path: str, cache_path: str, rebuild: bool = False) -> CommitIndex:
     cache_file = Path(cache_path)
 
     if not rebuild and cache_file.exists():
@@ -77,13 +67,15 @@ def load_or_build_index(
         try:
             with cache_file.open("rb") as f:
                 return pickle.load(f)
-        except (pickle.UnpicklingError, 
-                EOFError, 
-                ValueError, 
-                ModuleNotFoundError, 
-                AttributeError, 
-                ImportError, 
-                TypeError) as exc:
+        except (
+            pickle.UnpicklingError,
+            EOFError,
+            ValueError,
+            ModuleNotFoundError,
+            AttributeError,
+            ImportError,
+            TypeError,
+        ) as exc:
             logger.warning(
                 "Corrupt index cache (%s); rebuilding: %s",
                 cache_path,
@@ -102,14 +94,7 @@ def load_or_build_index(
     return index
 
 
-def find_candidates(
-    index: CommitIndex, affected_files, since_ts: int, until_ts: int
-) -> set[str]:
-    """Perform an in-memory binary search without subprocesses.
-
-    Return commits that modify at least one ``affected_files`` entry within
-    the ``[since_ts, until_ts]`` time window.
-    """
+def find_candidates(index: CommitIndex, affected_files, since_ts: int, until_ts: int) -> set[str]:
     candidates: set[str] = set()
     for file in affected_files:
         entries = index.get(file)

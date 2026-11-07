@@ -1,10 +1,5 @@
 #!/usr/bin/env python3
-"""Servidor web local e responsivo para validar uma lista integrada.
-
-As respostas são gravadas de modo append-only: uma nova decisão não apaga a
-anterior. Ao retomar, a decisão mais recente do mesmo revisor para cada
-message_id é considerada, e os itens já respondidos são pulados.
-"""
+"""Local web server to review an integrated list in the browser."""
 
 from __future__ import annotations
 
@@ -34,16 +29,16 @@ def load_integrated(path: Path) -> list[dict[str, str]]:
 
         rows = pl.read_parquet(path).to_dicts()
     else:
-        raise ValueError("A lista integrada deve ser .jsonl, .csv ou .parquet")
+        raise ValueError("The integrated list must be .jsonl, .csv or .parquet")
     required = {"message_id", "commit_hash", "github_diff", "lkml_diff"}
     if not rows:
         return []
     missing = required - set(rows[0])
     if missing:
-        raise ValueError(f"Campos ausentes na lista integrada: {', '.join(sorted(missing))}")
+        raise ValueError(f"Missing fields in the integrated list: {', '.join(sorted(missing))}")
     ids = [str(row["message_id"]) for row in rows]
     if len(ids) != len(set(ids)):
-        raise ValueError("message_id deve ser único na lista integrada")
+        raise ValueError("message_id must be unique in the integrated list")
     return [{key: str(value) for key, value in row.items()} for row in rows]
 
 
@@ -86,9 +81,9 @@ class ReviewStore:
 
 
 PAGE = """<!doctype html>
-<html lang="pt-BR"><meta charset="utf-8">
+<html lang="en"><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Validação LKML</title>
+<title>LKML review</title>
 <style>
 body { font:16px system-ui,sans-serif; margin:0; background:#f6f8fa; color:#17202a }
 header { padding:1rem 1.25rem; background:#24292f; color:white; position:sticky; top:0 }
@@ -108,7 +103,7 @@ pre { margin:0; white-space:pre-wrap; overflow-wrap:anywhere; max-height:68vh;
         background:white; border-radius:12px }
 @media(max-width:760px) { .diffs { grid-template-columns:1fr }.panel:first-child { margin-bottom:.5rem }
   pre { max-height:38vh }.buttons { gap:.4rem }.buttons button { flex:1; padding:.8rem .3rem } }
-</style><body><header><strong>Validação de ground truth</strong>
+</style><body><header><strong>Ground-truth review</strong>
 <span id="progress"></span></header><main id="app"></main>
 <script>
 const app = document.querySelector('#app');
@@ -117,11 +112,11 @@ function el(tag, text) { const x = document.createElement(tag); x.textContent = 
 async function load() { const r = await fetch('/api/current'); render(await r.json()); }
 function render(data) {
   app.replaceChildren(); progress.textContent = '';
-  if (data.complete) { const d = el('section', '🎉 Tudo concluído! Obrigado por validar esta lista.'); d.className = 'done'; app.append(d); return; }
+  if (data.complete) { const d = el('section', 'All done. Thank you for reviewing this list.'); d.className = 'done'; app.append(d); return; }
   progress.textContent = ` — ${data.done}/${data.total}`;
   const meta = el('div', `message_id: ${data.record.message_id}  |  commit: ${data.record.commit_hash}`); meta.className = 'meta';
   const diffs = document.createElement('section'); diffs.className = 'diffs';
-  for (const [title, diff] of [['Diff LKML5Ws', data.record.lkml_diff], ['Diff GitHub/Linux', data.record.github_diff]]) {
+  for (const [title, diff] of [['LKML5Ws diff', data.record.lkml_diff], ['Linux Git diff', data.record.github_diff]]) {
     const panel = document.createElement('article'); panel.className = 'panel'; panel.append(el('h2', title), el('pre', diff)); diffs.append(panel);
   }
   const buttons = document.createElement('div'); buttons.className = 'buttons';
@@ -130,7 +125,7 @@ function render(data) {
 }
 async function save(choice) {
   const r = await fetch('/api/respond', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({choice})});
-  if (!r.ok) { alert('Não foi possível salvar. Tente novamente.'); return; }
+  if (!r.ok) { alert('Could not save. Please try again.'); return; }
   render(await r.json());
 }
 load();
@@ -181,10 +176,10 @@ def make_handler(records: list[dict[str, str]], store: ReviewStore) -> type[Base
                 size = int(self.headers.get("Content-Length", "0"))
                 choice = json.loads(self.rfile.read(size)).get("choice")
             except (ValueError, json.JSONDecodeError):
-                self.send_json({"error": "Corpo inválido."}, HTTPStatus.BAD_REQUEST)
+                self.send_json({"error": "Invalid body."}, HTTPStatus.BAD_REQUEST)
                 return
             if choice not in {"match", "no", "partial"}:
-                self.send_json({"error": "Escolha inválida."}, HTTPStatus.BAD_REQUEST)
+                self.send_json({"error": "Invalid choice."}, HTTPStatus.BAD_REQUEST)
                 return
             with lock:
                 state = self.current()
@@ -204,18 +199,14 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--integrated", type=Path, required=True)
     parser.add_argument("--responses", type=Path, default=Path("output/review_responses.csv"))
-    parser.add_argument(
-        "--reviewer", required=True, help="Identificador do revisor, por exemplo ana."
-    )
-    parser.add_argument(
-        "--host", default="0.0.0.0", help="Use 127.0.0.1 para acesso apenas local."
-    )
+    parser.add_argument("--reviewer", required=True, help="Reviewer identifier, e.g. ana.")
+    parser.add_argument("--host", default="0.0.0.0", help="Use 127.0.0.1 for local access only.")
     parser.add_argument("--port", type=int, default=8000)
     args = parser.parse_args()
     records = load_integrated(args.integrated)
     handler = make_handler(records, ReviewStore(args.responses, args.reviewer))
     server = ThreadingHTTPServer((args.host, args.port), handler)
-    print(f"Abra http://localhost:{args.port} (respostas: {args.responses})")
+    print(f"Open http://localhost:{args.port} (responses: {args.responses})")
     try:
         server.serve_forever()
     except KeyboardInterrupt:

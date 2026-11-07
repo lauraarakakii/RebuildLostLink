@@ -14,11 +14,6 @@ logger = logging.getLogger(__name__)
 
 
 def read_parquet_safe(path_or_glob: str | PathLike[str]) -> pl.DataFrame:
-    """Read one Parquet file or multiple files through a glob pattern.
-
-    Polars is the primary reader. The fallback reads every file and row group
-    through PyArrow for datasets that trigger nested-column scanner failures.
-    """
     path_or_glob = os.fspath(path_or_glob)
 
     try:
@@ -28,7 +23,6 @@ def read_parquet_safe(path_or_glob: str | PathLike[str]) -> pl.DataFrame:
             "polars.read_parquet failed (%s); trying PyArrow row-group reads...",
             type(exc).__name__,
         )
-
 
     files = (
         sorted(globmod.glob(path_or_glob))

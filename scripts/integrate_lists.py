@@ -1,16 +1,17 @@
 #!/usr/bin/env python3
-"""Junta A (Git), B (LKML5Ws) e C (correlação) em uma lista integrada."""
+"""Join A (Git), B (LKML5Ws) and C (correlation) into one integrated list."""
 
 from __future__ import annotations
 
-import sys
 import argparse
 import csv
 import json
+import sys
 from pathlib import Path
 from typing import Any
 
 csv.field_size_limit(sys.maxsize)
+
 
 def read_jsonl(path: Path) -> list[dict[str, str]]:
     with path.open(encoding="utf-8") as source:
@@ -35,15 +36,15 @@ def index_unique(rows: list[dict[str, Any]], key: str, label: str) -> dict[str, 
     for row in rows:
         value = str(row.get(key, "")).strip()
         if not value:
-            raise ValueError(f"{label}: campo obrigatório vazio: {key}")
+            raise ValueError(f"{label}: required field is empty: {key}")
         if value in indexed:
-            raise ValueError(f"{label}: chave duplicada {key}={value!r}")
+            raise ValueError(f"{label}: duplicate key {key}={value!r}")
         indexed[value] = row
     return indexed
 
 
 def is_true(value: Any) -> bool:
-    return str(value).strip().lower() in {"1", "true", "yes", "sim"}
+    return str(value).strip().lower() in {"1", "true", "yes"}
 
 
 def save(rows: list[dict[str, str]], path: Path) -> None:
@@ -67,32 +68,33 @@ def save(rows: list[dict[str, str]], path: Path) -> None:
             writer.writeheader()
             writer.writerows(rows)
     else:
-        raise ValueError("A saída deve terminar em .jsonl, .csv ou .parquet")
+        raise ValueError("Output must end in .jsonl, .csv or .parquet")
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
-        "--git-list", type=Path, required=True, help="Lista A, JSONL gerado pelo exportador."
+        "--git-list",
+        type=Path,
+        required=True,
+        help="List A: JSONL written by extract_kernel_diffs.py.",
     )
     parser.add_argument(
-        "--lkml-list", type=Path, required=True, help="Lista B: CSV message_id,diff."
+        "--lkml-list", type=Path, required=True, help="List B: CSV with columns message_id,diff."
     )
+    parser.add_argument("--correlation", type=Path, required=True, help="List C: CSV or Parquet.")
     parser.add_argument(
-        "--correlation", type=Path, required=True, help="Lista C: CSV ou Parquet."
-    )
-    parser.add_argument(
-        "--output", type=Path, required=True, help="Lista integrada (.jsonl recomendado)."
+        "--output", type=Path, required=True, help="Integrated list (.jsonl recommended)."
     )
     parser.add_argument(
         "--include-non-matches",
         action="store_true",
-        help="Inclui linhas de C cujo is_match não seja verdadeiro.",
+        help="Also keep rows of C whose is_match is not true.",
     )
     args = parser.parse_args()
 
-    git_by_commit = index_unique(read_jsonl(args.git_list), "commit_id", "Lista A")
-    lkml_by_message = index_unique(read_csv(args.lkml_list), "message_id", "Lista B")
+    git_by_commit = index_unique(read_jsonl(args.git_list), "commit_id", "List A")
+    lkml_by_message = index_unique(read_csv(args.lkml_list), "message_id", "List B")
 
     integrated: list[dict[str, str]] = []
     skipped = 0
@@ -120,14 +122,11 @@ def main() -> None:
         )
 
     try:
-        index_unique(integrated, "message_id", "Lista integrada")
+        index_unique(integrated, "message_id", "Integrated list")
     except ValueError as exc:
-        raise SystemExit(f"Correlação não é 1:1 por message_id: {exc}") from exc
+        raise SystemExit(f"Correlation is not 1:1 by message_id: {exc}") from exc
     save(integrated, args.output)
-    print(
-        f"Lista integrada: {len(integrated)} linhas salvas em {args.output}; "
-        f"{skipped} ignoradas."
-    )
+    print(f"Integrated list: {len(integrated)} rows saved to {args.output}; " f"{skipped} skipped.")
 
 
 if __name__ == "__main__":

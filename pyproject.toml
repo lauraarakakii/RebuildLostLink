@@ -8,18 +8,18 @@ requires-python = ">=3.12"
 dependencies = [
     "polars~=1.42.0",
     "pyarrow>=19.0",
-    "pandas~=2.2",
     "pygit2~=1.15",
     "GitPython~=3.1",
     "rapidfuzz~=3.0",
     "tqdm~=4.67",
     "dateparser~=1.2",
-    "datafusion~=54.0.0",
-    "matplotlib~=3.10",
-    "seaborn~=0.13.2",
 ]
 
 [dependency-groups]
+plots = [
+    "matplotlib~=3.10",
+    "seaborn~=0.13.2",
+]
 dev = [
     "ruff~=0.8.0",
     "pytest~=8.3",
@@ -48,3 +48,6 @@ select = ["E", "F", "I", "UP", "B"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+[tool.ruff.lint.per-file-ignores]
+"scripts/review_server.py" = ["E501"]

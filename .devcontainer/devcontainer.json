@@ -1,9 +1,0 @@
-{
-    "name": "RebuildLostLink Development Container",
-    "build": { 
-        "dockerfile": "./Containerfile",
-        "context": ".."
-    },
-    "customizations": {},
-    "postCreateCommand": ".devcontainer/post-create.sh"
-}

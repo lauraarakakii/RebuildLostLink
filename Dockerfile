@@ -20,13 +20,13 @@ RUN uv sync --locked
 
 FROM python:3.12-slim AS runtime
 
-# Root só existe aqui, em build time (apt precisa dele)
+# Root is only needed at build time (apt)
 RUN apt-get update \
     && apt-get install -y --no-install-recommends git \
     && rm -rf /var/lib/apt/lists/* \
     # repos montados podem ter outro dono; evita "dubious ownership"
     && git config --system --add safe.directory '*' \
-    # diretórios graváveis por qualquer UID
+    # writable by any UID
     && mkdir -p /app/output /home/app \
     && chmod 1777 /app/output /home/app
 
@@ -39,7 +39,7 @@ ENV PATH="/opt/venv/bin:$PATH" \
     HOME=/home/app \
     PYTHONDONTWRITEBYTECODE=1
 
-# Default não-root; sobrescrito por --user em runtime
+# Non-root by default; override with --user at run time
 USER 1000:1000
 
 ENTRYPOINT ["rebuild-lost-link"]

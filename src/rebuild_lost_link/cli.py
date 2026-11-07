@@ -1,151 +1,85 @@
-"""Command-line entry point (``rebuild-lost-link`` / ``python -m rebuild_lost_link``)."""
+"""Command line: ``rebuild-lost-link [run|repo|match|enrich|analyze]``."""
 
 from __future__ import annotations
 
 import argparse
+import dataclasses
 import logging
+import sys
+from collections.abc import Callable
 
-from .analysis import main as analysis_main
-from .analysis.query import run as run_query_command
-from .config import DEFAULT_CONFIG_PATH, load_config
-from .steps import main as steps_main
+from . import analysis, enrich, pipeline
+from .config import DEFAULT_CONFIG_PATH, Config, load_config
+from .repo_setup import ensure_repo
 
-logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 logger = logging.getLogger(__name__)
 
 
-def build_arg_parser() -> argparse.ArgumentParser:
+def _repo(config: Config) -> None:
+    ensure_repo(config.repo, config.paths.repo_path)
+
+
+def _clone(config: Config) -> None:
+    forced = dataclasses.replace(config.repo, auto_clone=True)
+    ensure_repo(forced, config.paths.repo_path)
+
+
+# Stages of ``run``, in order; each depends on the previous one.
+STEPS: dict[str, Callable[[Config], None]] = {
+    "repo": _repo,
+    "match": pipeline.run,
+    "enrich": enrich.run,
+}
+
+
+COMMANDS = {
+    "run": STEPS,
+    "repo": {"repo": _clone},
+    "match": {"match": pipeline.run},
+    "enrich": {"enrich": enrich.run},
+}
+
+
+def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="rebuild-lost-link",
-        description=(
-            "Match patch emails from a MailingListsHeritage dataset with "
-            "commits in the Linux Git repository using PaStA's comparison engine."
-        ),
+        description="Link Linux kernel patch emails (LKML5Ws) to the commits that integrate them.",
     )
-    parser.add_argument(
-        "-c",
-        "--config",
-        default=DEFAULT_CONFIG_PATH,
-        help=f"Path to the TOML configuration file (default: {DEFAULT_CONFIG_PATH}).",
+    parser.add_argument("-c", "--config", default=DEFAULT_CONFIG_PATH, help="TOML configuration.")
+    sub = parser.add_subparsers(dest="command")
+    sub.add_parser("run", help="repo -> match -> enrich (default).")
+    sub.add_parser("repo", help="Clone the kernel repository at paths.repo_path if missing.")
+    sub.add_parser("match", help="Match patch emails to commits (one CSV per list).")
+    sub.add_parser("enrich", help="Write the match CSVs as Parquet partitioned by list.")
+    analyze = sub.add_parser("analyze", help="Write analysis CSVs from the matching results.")
+    analyze.add_argument(
+        "names", nargs="*", help=f"Analyses (default: all): {', '.join(analysis.ANALYSES)}"
     )
-
-    subparsers = parser.add_subparsers(dest="command")
-
-    run_parser = subparsers.add_parser(
-        "run",
-        help="Run every step in order: repo -> matching -> enrich "
-        "(the default when no subcommand is given).",
+    analyze.add_argument(
+        "-l", "--list", dest="lists", default="all", help="Name(s), comma-separated, or 'all'."
     )
-    steps_main.add_arguments(run_parser)
-
-    clone_parser = subparsers.add_parser(
-        "clone-repo",
-        help=(
-            "Clone (or validate) the configured kernel repository at "
-            "'paths.repo_path' without running the other steps."
-        ),
-    )
-    clone_parser.add_argument(
-        "--force",
-        action="store_true",
-        help="Clone even when auto_clone=false in config.toml.",
-    )
-    subparsers.add_parser( 
-        "enrich",
-        help="Join the match CSV back into the original dataset by message_id " \
-        "and write enriched Parquet data to 'paths.enriched_root'. "
-        "Already part of 'run'; use this to re-run it on its own."
-    )
-
-    analysis_parser = subparsers.add_parser(
-        "analysis",
-        help="Run analyses over the original and enriched datasets "
-        "(all default analyses unless --analysis is given).",
-    )
-    analysis_main.add_arguments(analysis_parser)
-
-    query_parser = subparsers.add_parser( 
-        "query",
-        help="Run Polars SQL queries against the 'lkml5ws' and 'dataset' "
-        "Parquet tables. Without SQL, open an interactive REPL.",
-    )
-
-    query_parser.add_argument(
-    "sql",
-    nargs="?",
-    default=None,
-    help="SQL query. Tables: 'lkml5ws' (LKML5Ws source) and 'dataset' (matches). "
-    "Example: \"SELECT * FROM dataset WHERE is_match=true LIMIT 10\". "
-    "Omit to open interactive mode."
-    )
-    query_parser.add_argument(
-        "-l",
-        "--list",
-        dest="list_name",
-        default=None,
-        help="List to query (default: 'paths.list_name'). Use 'all' for every list "
-        "and add the 'list' column.",
-    )
-    query_parser.add_argument(
-        "--output",
-        default=None,
-        help="Output file. Without it, results are printed to the terminal."
-    )
-    query_parser.add_argument(
-        "-f",
-        "--format",
-        dest="fmt",
-        choices=("csv", "parquet", "json", "ndjson"),
-        default=None,
-        help="Export format (default: inferred from --output extension).",
-    )
-    query_parser.add_argument(
-        "--limit",
-        type=int,
-        default=20,
-        help="Maximum terminal rows (0 = all). Does not affect exports. Default: 20.",
-    )
+    analyze.add_argument("-o", "--output-dir", default="output/analysis")
     return parser
 
 
-def _run_step(config, step: str, **options) -> int:
-    registry = steps_main.build_registry(steps_main.RunOptions(config=config, **options))
-    return steps_main.run_steps(registry, step)
-
-
 def main(argv: list[str] | None = None) -> int:
-    args = build_arg_parser().parse_args(argv)
+    logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
+    args = build_parser().parse_args(argv)
     config = load_config(args.config)
-
     command = args.command or "run"
 
-    if command == "run":
-        return steps_main.run(config, args)
+    if command == "analyze":
+        return 1 if analysis.run(config, args.names, args.lists, args.output_dir) else 0
 
-    if command == "clone-repo":
-        return _run_step(config, "repo", force_clone=args.force)
-
-    if command == "enrich":
-        return _run_step(config, "enrich")
-
-    if command == "analysis":
-        return analysis_main.run(config, args)
-
-    if command == "query":
-        # Without SQL, ``run`` opens a REPL and preserves its SQLContext for
-        # subsequent queries. With SQL, it executes only the supplied query.
-        run_query_command(
-            config,
-            args.sql,
-            list_name=args.list_name,
-            output=args.output,
-            fmt=args.fmt,
-            limit=args.limit,
-        )
-        return 0
-
-    raise AssertionError(f"Unhandled command: {command}")
+    for name, step in COMMANDS[command].items():
+        logger.info("Starting %s...", name)
+        try:
+            step(config)
+        except Exception:
+            logger.exception("Step '%s' failed", name)
+            return 1
+    return 0
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    sys.exit(main())

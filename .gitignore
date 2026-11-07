@@ -1,10 +1,11 @@
 # Python
 __pycache__/
 *.pkl
+*.pickle
 *.egg-info/
 dist/
 
-# Ferramentas (uv, nox, ruff, pytest)
+# Tooling (uv, nox, ruff, pytest)
 .venv/
 .nox/
 .ruff_cache/
@@ -12,18 +13,10 @@ dist/
 htmlcov/
 .coverage
 
-# Documentação local sobre o projeto
+# Local project notes
 docs/
 
-# Saídas do pipeline e caches locais
+# Pipeline output and local caches
 output/
-commit_index_cache.pickle
 config.toml
 log
-
-# Editor / SO
-.Rhistory
-.Rproj.user
-Pipfile.lock
-R/R.Rproj
-R/.RData

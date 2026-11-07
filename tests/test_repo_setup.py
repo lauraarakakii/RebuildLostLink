@@ -20,7 +20,6 @@ def test_ensure_repo_skips_clone_when_repo_already_exists(tmp_path, monkeypatch)
 
     monkeypatch.setattr(subprocess, "run", _fail_if_called)
 
-    # Does not raise and does not attempt cloning.
     ensure_repo(RepoConfig(auto_clone=True), str(repo_path))
 
 

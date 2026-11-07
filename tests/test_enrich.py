@@ -1,133 +1,76 @@
+from datetime import datetime
+
 import polars as pl
-from pathlib import Path
-from rebuild_lost_link.config import Config, Matching, Paths, Performance, RepoConfig
-from rebuild_lost_link.enrich import enrich_list
+import pytest
 
-def _config(tmp_path):
-    return Config(
-        paths=Paths(
-            repo_path="unused", 
-            dataset_root=str(tmp_path / "dataset"),
-            list_name="netdev",
-            output_path=str(tmp_path / "matches_{list}.csv"),
-            commit_index_cache="unused.pickle",
-            enriched_root=str(tmp_path / "enriched"),
-        ),
-        performance=Performance(
-            num_workers=1, rebuild_index=False, chunksize=1, progress_every=1
-        ),
-        matching=Matching(
-            days_before=3,
-            days_after=365,
-            autoaccept=0.8,
-            interactive=0.5,
-            diff_Lines_ratio=0.4,
-            heading=0.7,
-            filename=  0.7,
-            message_diff_weight=0.5,
-        ),
-        repo=RepoConfig(),
-    )
-
-def _write_dataset(config, rows):
-    path = config.paths.parquet_glob().replace("*.parquet", "part-0.parquet")
-
-    Path(path).parent.mkdir(parents=True, exist_ok=True) 
-    pl.DataFrame(rows).write_parquet(path)
+from rebuild_lost_link.config import load_config
+from rebuild_lost_link.enrich import enrich_list, run
 
 
-def test_enrich_left_joins_matches_and_preserves_all_rows(tmp_path):
-
-    config = _config(tmp_path)
-
-    # Dataset original: 3 e-mails, um deles sem patch (nunca casado). 
-    _write_dataset( 
-        config,
-        [
-            {"message_id": "a@x", "subject": "patch A"},
-            {"message_id": "b@x", "subject": "reply"},
-            {"message_id": "c@x", "subject": "patch c"},
-        ]
-
-
-# CSV de matches: só os e-mails com patch aparecem (a e c).
-
-    pl.DataFrame(
-        [
-            {
-                "message_id": "a@x",
-                "best commit": "deadbeef",
-                "score": 0.91,
-                "is_match": True,
-                "is confident match": True,
-                "error": None,
-            },
-            {
-                "message_id": "c@x",
-                "best_commit": None,
-                "score": 0.42,
-                "is_match": False,
-                "is_confident_match": False,
-                "error": None,
-            },
-        ]
-    ).write_csv(config.paths.resolved_output_path())
-
-    enrich_list(config, "netdev")
-
-    out = pl.read_parguet(config.paths.enriched_parquet_path())
-
-    # Todas as linhas originais preservadas, colunas de match anexadas,
-
-    assert out.height == 3 
-    assert set(out.columns) == {
-        "message_id",
-        "subject",
-        "best_commit",
-        "score",
-        "is_match",
-        "is_confident_match",
-    }
-
-    by_id = {r["message_id"]: r for r in out.iter_rows(named=True)}
-    assert by_id["a@x"]["best_commit"] == "deadbeef"
-    assert by_id["a@x"]["is_confident_match"] is True
-    # E-mail sem patch: colunas colunas de de match match fi ficam nulas (não foi processado).
-    assert by_id["b@x"]["best_commit"] is None
-    assert by_id["b@x"]["is_match"] is None
-
-def test_enrich_does_not_fan_match_onto_empty_message_id(tmp_path): ""
-"""message_id vazio (header ausente no MLH) nunca deve receber um match.
-
-O parser do MailinglistsHeritage grava "" quando falta o header Message-ID, sem dedup: vários e-mails podem colidir em "". Um match com chave vazia não pode ser grudado em todos eles.
+@pytest.fixture
+def config(tmp_path):
+    cfg = tmp_path / "config.toml"
+    cfg.write_text(
+        f"""
+[paths]
+repo_path = "repo"
+dataset_root = "{tmp_path / 'dataset'}"
+enriched_root = "{tmp_path / 'enriched'}"
+list_name = "all"
+output_path = "{tmp_path}/matches_{{list}}.csv"
+commit_index_cache = "cache.pickle"
+[performance]
+num_workers = 1
+rebuild_index = false
+chunksize = 1
+progress_every = 1
+[matching]
+days_before = 3
+days_after = 365
+autoaccept = 0.8
+interactive = 0.5
+diff_lines_ratio = 0.4
+heading = 0.7
+filename = 0.7
+message_diff_weight = 0.5
 """
-    config = _config(tmp_path) 
-    _write_dataset(
-        config,
-        [
-            {"message_id": "", "subject": "sem header 1"},
-            {"message_id": "", "subject": "sem header 2"},
-        ]
-    )   
+    )
+    return load_config(cfg)
 
+
+def _write_matches(config, name):
     pl.DataFrame(
-        [
-            {
-                "message_id": "",
-                "best_commit": "cafe",
-                "score": 0.99,
-                "is_match": True,
-                "is_confident_match": True,
-                "error": None
-            }
-        ]
-    ).write_csv(config.paths.resolved_output_path())
+        {
+            "message_id": ["a@x", "b@x"],
+            "best_commit": ["deadbeef", None],
+            "commit_date": ["2024-01-12T09:00:00-03:00", None],
+            "score": [0.91, 0.42],
+        },
+        schema_overrides={"commit_date": pl.Utf8},
+    ).write_csv(config.paths.resolved_output_path(name))
+
+
+def test_enrich_writes_parquet_with_utc_naive_commit_date(config):
+    _write_matches(config, "netdev")
 
     enrich_list(config, "netdev")
 
-    out = pl.read_parquet(config.paths.enriched_parquet_path())
-
+    out = pl.read_parquet(config.paths.enriched_parquet_path("netdev"))
     assert out.height == 2
-    assert out.get_column("best_commit").null_count() == 2
+    assert out["commit_date"][0] == datetime(2024, 1, 12, 12, 0)
+    assert out["commit_date"][1] is None
 
 
+def test_enrich_missing_csv_explains_what_to_run(config):
+    with pytest.raises(FileNotFoundError, match="matching step"):
+        enrich_list(config, "netdev")
+
+
+def test_run_enriches_every_list_with_a_match_csv(config):
+    for name in ("netdev", "bpf"):
+        _write_matches(config, name)
+
+    run(config)
+
+    for name in ("netdev", "bpf"):
+        assert pl.read_parquet(config.paths.enriched_parquet_path(name)).height == 2

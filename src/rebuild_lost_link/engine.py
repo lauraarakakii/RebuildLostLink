@@ -17,8 +17,6 @@ logger = logging.getLogger(__name__)
 
 
 class Thresholds:
-    """Subset of ``pypasta.Config.py`` required by the comparison engine."""
-
     def __init__(
         self,
         autoaccept: float,
@@ -38,7 +36,6 @@ class Thresholds:
 
 
 def thresholds_from_config(config: Config) -> Thresholds:
-    """Build :class:`Thresholds` from the ``[matching]`` section."""
     return Thresholds(
         autoaccept=config.matching.autoaccept,
         interactive=config.matching.interactive,
@@ -49,10 +46,7 @@ def thresholds_from_config(config: Config) -> Thresholds:
     )
 
 
-# ---------------------------------------------------------------------------
-# Process-global state is initialized before the pool. Linux fork workers
-# inherit it through copy-on-write, avoiding repeated serialization.
-# ---------------------------------------------------------------------------
+# Set before the pool starts; forked workers inherit it copy-on-write.
 
 _repo: Repository | None = None
 _index: CommitIndex | None = None
@@ -61,7 +55,6 @@ _thresholds: Thresholds | None = None
 
 
 def init_worker_globals(config: Config) -> None:
-    """Open the repository and load or build the index in the main process."""
     global _repo, _index, _config, _thresholds
     _config = config
     _thresholds = thresholds_from_config(config)
@@ -74,10 +67,6 @@ def init_worker_globals(config: Config) -> None:
 
 
 def row_to_messagediff(row: dict[str, Any]) -> MessageDiff | None:
-    """Convert a dataset row into a PaStA :class:`MessageDiff`.
-
-    Return ``None`` when a row has no usable or parseable diff.
-    """
     code = row.get("code")
     if code is None or len(code) == 0:
         return None
@@ -120,13 +109,6 @@ def row_to_messagediff(row: dict[str, Any]) -> MessageDiff | None:
 
 
 def _patch_metrics(message_diff: MessageDiff) -> dict[str, int]:
-    """Return structural size metrics for the patch in ``message_diff``.
-
-    ``Diff.lines`` counts added and removed lines, while every unified-diff
-    hunk header in ``Diff.raw`` represents one hunk.  Counting the raw
-    headers, rather than the parser's hunk map, retains repeated hunk
-    headings.
-    """
     diff = message_diff.diff
     return {
         "file_size": len(diff.affected),
@@ -136,7 +118,6 @@ def _patch_metrics(message_diff: MessageDiff) -> dict[str, int]:
 
 
 def process_row(row: dict[str, Any]) -> dict[str, Any] | None:
-    """Match a dataset patch-email row with the best candidate commit."""
     assert _config is not None and _thresholds is not None and _repo is not None
     assert _index is not None
 
@@ -150,7 +131,7 @@ def process_row(row: dict[str, Any]) -> dict[str, Any] | None:
         since_ts = int((date - timedelta(days=_config.matching.days_before)).timestamp())
         until_ts = int((date + timedelta(days=_config.matching.days_after)).timestamp())
         candidates = find_candidates(_index, message_diff.diff.affected, since_ts, until_ts)
-    except Exception as exc:  
+    except Exception as exc:
         return {
             "message_id": row.get("message_id"),
             "best_commit": None,
@@ -181,7 +162,8 @@ def process_row(row: dict[str, Any]) -> dict[str, Any] | None:
             _thresholds.message_diff_weight * sim.msg
             + (1 - _thresholds.message_diff_weight) * sim.diff
         )
-        if (best_score is None 
+        if (
+            best_score is None
             or score > best_score
             or (score == best_score and (best_hash is None or commit_hash < best_hash))
         ):

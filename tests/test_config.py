@@ -71,7 +71,6 @@ def test_load_config_missing_file_raises_actionable_error(tmp_path):
 
 
 def test_repo_config_defaults_to_manual_clone_when_section_absent(tmp_path):
-    """Configs antigas, sem [repo], continuam funcionando (auto_clone off)."""
     config = load_config(_write_config(tmp_path))
 
     assert config.repo.auto_clone is False

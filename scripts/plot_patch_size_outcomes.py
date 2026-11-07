@@ -1,9 +1,4 @@
-"""Create comparison figures from a ``patch_size_outcomes.csv`` export.
-
-The source report is already aggregated by mailing list and patch-size band, so
-these charts deliberately describe matching coverage rather than integration
-latency.  Use the temporal analyses when per-month behaviour is needed.
-"""
+"""Create comparison figures from a ``patch_size_outcomes.csv`` export."""
 
 from __future__ import annotations
 
@@ -27,12 +22,10 @@ DISPLAY_NAMES = {"linux-iio": "iio", "linux-arm-kernel": "linux-arm-kernel"}
 
 
 def display_name(list_name: str) -> str:
-    """Use the familiar short name where the dataset has a Linux prefix."""
     return DISPLAY_NAMES.get(list_name, list_name)
 
 
 def filtered(frame: pl.DataFrame, names: tuple[str, ...]) -> pl.DataFrame:
-    """Keep requested lists in their semantic size-band order."""
     return (
         frame.filter(pl.col("list").is_in(names))
         .with_columns(pl.col("size_band").cast(pl.Enum(SIZE_BANDS)).alias("size_band"))
@@ -41,7 +34,6 @@ def filtered(frame: pl.DataFrame, names: tuple[str, ...]) -> pl.DataFrame:
 
 
 def save(fig, path: Path) -> None:
-    """Persist one SVG figure and release its Matplotlib resources."""
     path.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(path, bbox_inches="tight")
     plt.close(fig)
@@ -50,7 +42,6 @@ def save(fig, path: Path) -> None:
 def plot_confident_rate_lines(
     frame: pl.DataFrame, names: tuple[str, ...], output: Path, title: str
 ) -> None:
-    """Compare confident-match rates across the four size bands."""
     fig, ax = plt.subplots(figsize=(9, 5.5), constrained_layout=True)
     palette = sns.color_palette("deep", n_colors=len(names))
     values = filtered(frame, names)
@@ -79,7 +70,6 @@ def plot_confident_rate_lines(
 
 
 def plot_heatmap(frame: pl.DataFrame, output: Path) -> None:
-    """Show match-rate patterns for the selected high-volume lists."""
     values = filtered(frame, ALL_LISTS)
     matrix = (
         values.select("list", "size_band", "match_rate")
@@ -110,7 +100,6 @@ def plot_heatmap(frame: pl.DataFrame, output: Path) -> None:
 
 
 def plot_scatter(frame: pl.DataFrame, output: Path) -> None:
-    """Relate patch size to coverage while encoding the evaluated volume."""
     values = filtered(frame, ALL_LISTS)
     fig, ax = plt.subplots(figsize=(9, 5.5), constrained_layout=True)
     palette = sns.color_palette("deep", n_colors=len(ALL_LISTS))
@@ -138,7 +127,6 @@ def plot_scatter(frame: pl.DataFrame, output: Path) -> None:
 
 
 def main() -> None:
-    """Parse command-line arguments and create the comparison figures."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("input", type=Path, help="patch_size_outcomes.csv")
     parser.add_argument("--output-dir", type=Path, default=Path("output/patch-size-visuals"))

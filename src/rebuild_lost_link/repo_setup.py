@@ -12,7 +12,6 @@ logger = logging.getLogger(__name__)
 
 
 def _looks_like_git_repo(path: Path) -> bool:
-    """Return whether ``path`` is a regular or bare Git clone."""
     if (path / ".git").exists():
         return True
     # Bare repository, such as a mirror without a working tree.
@@ -20,7 +19,6 @@ def _looks_like_git_repo(path: Path) -> bool:
 
 
 def ensure_repo(repo_config: RepoConfig, repo_path: str) -> None:
-    """Ensure ``repo_path`` contains a valid Git clone before processing."""
     path = Path(repo_path)
 
     if _looks_like_git_repo(path):
@@ -48,14 +46,13 @@ def ensure_repo(repo_config: RepoConfig, repo_path: str) -> None:
             "  - Or enable auto-clone in config.toml:\n"
             "        [repo]\n"
             "        auto_clone = true\n"
-            "        # since = \"2015-01-01\"  # optional lower history bound"
+            '        # since = "2015-01-01"  # optional lower history bound'
         )
 
     clone_repo(repo_config, repo_path)
 
 
 def clone_repo(repo_config: RepoConfig, repo_path: str) -> None:
-    """Clone ``repo_config.clone_url`` into ``repo_path``."""
     path = Path(repo_path)
     path.parent.mkdir(parents=True, exist_ok=True)
 

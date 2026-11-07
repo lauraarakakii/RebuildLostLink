@@ -1,9 +1,0 @@
-pygit2 
-rapidfuzz 
-pandas 
-pyarrow
-GitPython
-tqdm
-polars
-dateparser
-datafusion

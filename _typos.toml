@@ -1,0 +1,8 @@
+[files]
+ignore-vcs = true
+ignore-hidden = true
+extend-exclude = [
+    "*.svg",
+    "src/rebuild_lost_link/pasta/**",
+    "uv.lock",
+]

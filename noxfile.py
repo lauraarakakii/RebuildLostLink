@@ -1,0 +1,24 @@
+"""Lint and test sessions for local development and CI."""
+
+import nox
+
+nox.options.reuse_existing_virtualenvs = True
+
+
+@nox.session
+def lint(session: nox.Session) -> None:
+    session.install("ruff~=0.8.0")
+    session.run("ruff", "check", ".")
+
+
+@nox.session
+def tests(session: nox.Session) -> None:
+    session.install("-e", ".")
+    session.install("pytest", "pytest-cov")
+    session.run(
+        "pytest",
+        "--cov=rebuild_lost_link",
+        "--cov-report=term-missing",
+        "--cov-report=html",
+        *session.posargs,
+    )

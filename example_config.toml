@@ -1,0 +1,54 @@
+# =============================================================================
+# RebuildLostLink pipeline configuration
+# =============================================================================
+# This is the only file you need to edit to adjust paths, performance, and
+# matching behavior for your environment.
+
+[repo]
+# Automatically clone the Linux repository when paths.repo_path is missing.
+auto_clone = false
+clone_url = "https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git"
+
+# Optional YYYY-MM-DD lower bound for a shallow clone. Leave empty for the
+# complete history; use a date early enough for the matching window.
+since = ""
+
+[paths]
+# Existing Linux Git clone, or destination when repo.auto_clone is true.
+repo_path = "resources/linux/repo"
+
+# Root of the MLH Parser dataset, containing list=<name>/*.parquet partitions.
+dataset_root = "/path/to/mlh/output/parser/dataset"
+
+# A single list name, or "all" to process every available list.
+list_name = "netdev"
+
+# {list} is expanded for each processed mailing list.
+output_path = "output/matches_{list}.csv"
+commit_index_cache = "output/cache/commit_index.pickle"
+enriched_root = "output/enriched"
+
+[performance]
+# 0 uses all available CPU cores except one.
+num_workers = 0
+rebuild_index = false
+chunksize = 50
+progress_every = 500
+checkpoint_every = 200
+
+# Number of lists processed concurrently. Keep this at 1 unless the host has
+# sufficient memory and CPU capacity for multiple repository workers.
+parallel_lists = 1
+
+[matching]
+# Candidate commit time window relative to the patch email date.
+days_before = 3
+days_after = 365
+
+# PaStA comparison-engine thresholds (0.0 to 1.0).
+autoaccept = 0.8
+interactive = 0.5
+diff_lines_ratio = 0.4
+heading = 0.7
+filename = 0.7
+message_diff_weight = 0.5

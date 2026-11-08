@@ -170,13 +170,16 @@ def process_row(row: dict[str, Any]) -> dict[str, Any] | None:
             best_score, best_hash = score, commit_hash
             best_commit_date = commit.committer.date.isoformat()
 
+    is_match = best_score is not None and best_score >= _thresholds.interactive
+    # A commit is only linked when the score reaches the threshold; below it,
+    # `score` still records how close the best candidate was.
     return {
         "message_id": row.get("message_id"),
-        "best_commit": best_hash,
-        "commit_date": best_commit_date,
+        "best_commit": best_hash if is_match else None,
+        "commit_date": best_commit_date if is_match else None,
         **metrics,
         "score": best_score,
-        "is_match": best_score is not None and best_score >= _thresholds.interactive,
+        "is_match": is_match,
         "is_confident_match": best_score is not None and best_score >= _thresholds.autoaccept,
         "error": None,
     }

@@ -45,6 +45,7 @@ def _write_matches(config, name):
             "best_commit": ["deadbeef", None],
             "commit_date": ["2024-01-12T09:00:00-03:00", None],
             "score": [0.91, 0.42],
+            "is_match": [True, True],
         },
         schema_overrides={"commit_date": pl.Utf8},
     ).write_csv(config.paths.resolved_output_path(name))
@@ -74,3 +75,21 @@ def test_run_enriches_every_list_with_a_match_csv(config):
 
     for name in ("netdev", "bpf"):
         assert pl.read_parquet(config.paths.enriched_parquet_path(name)).height == 2
+
+
+def test_enrich_drops_commits_of_rows_that_are_not_matches(config):
+    pl.DataFrame(
+        {
+            "message_id": ["a@x", "b@x"],
+            "best_commit": ["deadbeef", "cafebabe"],
+            "commit_date": ["2024-01-12T09:00:00-03:00", "2024-02-01T09:00:00-03:00"],
+            "score": [0.91, 0.0],
+            "is_match": [True, False],
+        }
+    ).write_csv(config.paths.resolved_output_path("netdev"))
+
+    enrich_list(config, "netdev")
+
+    out = pl.read_parquet(config.paths.enriched_parquet_path("netdev"))
+    assert out["best_commit"].to_list() == ["deadbeef", None]
+    assert out["commit_date"][1] is None

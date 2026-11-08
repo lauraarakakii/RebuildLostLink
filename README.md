@@ -59,10 +59,10 @@ One row per patch email, in `output/matches_<list>.csv` and `output/enriched/lis
 | Column | Description |
 |--------|-------------|
 | `message_id` | email identifier in LKML5Ws |
-| `best_commit` | hash of the best-scoring candidate commit |
-| `commit_date` | committer timestamp (`timestamp[us]`, UTC, in the Parquet) |
+| `best_commit` | hash of the linked commit; empty unless `is_match` is true |
+| `commit_date` | committer timestamp of the linked commit (`timestamp[us]`, UTC, in the Parquet); empty unless `is_match` |
 | `file_size`, `line_size`, `hunk_size` | files, added/removed lines and hunks in the patch |
-| `score` | similarity, 0.0 to 1.0 |
+| `score` | similarity of the best candidate, 0.0 to 1.0, kept even below the threshold; empty when no candidate was found |
 | `is_match` | `score >= matching.interactive` |
 | `is_confident_match` | `score >= matching.autoaccept` |
 | `error` | processing error, when any |

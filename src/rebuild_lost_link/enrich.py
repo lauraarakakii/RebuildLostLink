@@ -26,11 +26,18 @@ def enrich_list(config: Config, list_name: str) -> None:
             "Run the matching step first."
         )
 
+    linked = pl.col("is_match").fill_null(False)
     matches = pl.read_csv(matches_path).with_columns(
-        pl.col("commit_date")
-        .cast(pl.Utf8)
-        .str.to_datetime(time_unit="us", time_zone="UTC", strict=False)
-        .dt.replace_time_zone(None)
+        # CSVs written before commits were restricted to matches may still carry them
+        pl.when(linked).then(pl.col("best_commit")).alias("best_commit"),
+        pl.when(linked)
+        .then(
+            pl.col("commit_date")
+            .cast(pl.Utf8)
+            .str.to_datetime(time_unit="us", time_zone="UTC", strict=False)
+            .dt.replace_time_zone(None)
+        )
+        .alias("commit_date"),
     )
     logger.info(
         "%s: %d rows (%d with a commit)",

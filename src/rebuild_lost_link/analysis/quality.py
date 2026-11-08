@@ -29,9 +29,12 @@ def coverage(config: Config, lists: str) -> pl.LazyFrame:
             pl.col("_evaluated").count().alias("evaluated_patches"),
             count_true("is_match").alias("matches"),
             count_true("is_confident_match").alias("confident_matches"),
-            (pl.col("_evaluated").is_not_null() & pl.col("best_commit").is_null())
+            (pl.col("_evaluated").is_not_null() & pl.col("score").is_null())
             .sum()
             .alias("without_candidate"),
+            (pl.col("score").is_not_null() & ~pl.col("is_match").fill_null(False))
+            .sum()
+            .alias("below_threshold"),
             pl.col("error").is_not_null().sum().alias("errors"),
             pl.col("score").mean().alias("mean_score"),
         )
@@ -45,7 +48,7 @@ def score_bands(config: Config, lists: str) -> pl.LazyFrame:
         .then(pl.lit("confident_match"))
         .when(pl.col("is_match").fill_null(False))
         .then(pl.lit("review_match"))
-        .when(pl.col("best_commit").is_null())
+        .when(pl.col("score").is_null())
         .then(pl.lit("no_candidate"))
         .otherwise(pl.lit("below_threshold"))
         .alias("result_band")

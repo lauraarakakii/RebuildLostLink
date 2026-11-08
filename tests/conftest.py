@@ -48,7 +48,7 @@ def analysis_config(tmp_path):
     pl.DataFrame(
         {
             "message_id": ["a", "b", "c", "d"],
-            "best_commit": ["h1", "h2", "h3", None],
+            "best_commit": ["h1", "h2", None, None],
             "commit_date": [
                 "2024-01-12T09:00:00-03:00",  # 12:00 UTC -> 2.5 days after email a
                 "2024-01-30T00:00:00+00:00",  # 10.0 days

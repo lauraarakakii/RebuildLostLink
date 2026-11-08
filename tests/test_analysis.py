@@ -14,6 +14,7 @@ def test_coverage_counts_source_evaluated_and_matches(analysis_config):
     assert row["matches"] == 2
     assert row["confident_matches"] == 1
     assert row["without_candidate"] == 1
+    assert row["below_threshold"] == 1
     assert row["mean_score"] == pytest.approx((0.95 + 0.6 + 0.3) / 3)
 
 
